@@ -1,0 +1,22 @@
+# Environments
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+
+# Node
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.DS_Store
+
+# Logs & temp
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+

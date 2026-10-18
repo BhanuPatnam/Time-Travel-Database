@@ -1,0 +1,54 @@
+services:
+  oracle-db:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: timetravel-oracle-21c
+    platform: linux/amd64
+    environment:
+      - ORACLE_PASSWORD=tt_secret_123
+      - APP_USER=tt_admin
+      - APP_USER_PASSWORD=tt_secret_123
+      - ORACLE_DATABASE=XEPDB1
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./database:/container-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s tt_admin/tt_secret_123@//localhost:1521/XEPDB1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: timetravel-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ORACLE_USER=tt_admin
+      - ORACLE_PASSWORD=tt_secret_123
+      - ORACLE_DSN=oracle-db:1521/XEPDB1
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: timetravel-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  oracle-data:
