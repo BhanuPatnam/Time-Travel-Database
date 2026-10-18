@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { GitCommit, Search, RefreshCw, ArrowRight } from 'lucide-react';
+import { GitCommit, Search, RefreshCw, ArrowRight, Table, Layers, History } from 'lucide-react';
 import apiService from '../services/api';
+import { SqlMutationDiffTableView } from '../components/SqlRecordTableView';
 
 export default function TimelinePage({ initialTable = 'CUSTOMERS', initialPk = '101' }) {
   const [tableName, setTableName] = useState(initialTable);
@@ -39,9 +40,14 @@ export default function TimelinePage({ initialTable = 'CUSTOMERS', initialPk = '
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white">Record Version Timeline</h2>
-        <p className="text-xs text-slate-400">
-          Chronological audit trail of all transactions and attribute mutations
+        <div className="flex items-center space-x-2">
+          <h2 className="text-xl font-bold text-white">Record Version Timeline</h2>
+          <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] font-semibold uppercase">
+            SQL Column Diff
+          </span>
+        </div>
+        <p className="text-xs text-slate-400 mt-0.5">
+          Chronological audit trail of all transactions and row mutations rendered as relational SQL column diffs
         </p>
       </div>
 
@@ -50,7 +56,7 @@ export default function TimelinePage({ initialTable = 'CUSTOMERS', initialPk = '
         <select
           value={tableName}
           onChange={(e) => setTableName(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+          className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 cursor-pointer"
         >
           <option value="CUSTOMERS">CUSTOMERS</option>
           <option value="PRODUCTS">PRODUCTS</option>
@@ -62,18 +68,24 @@ export default function TimelinePage({ initialTable = 'CUSTOMERS', initialPk = '
           value={recordPk}
           onChange={(e) => setRecordPk(e.target.value)}
           placeholder="Record PK (e.g. 101)"
-          className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+          className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 font-mono"
         />
 
         <button
           onClick={fetchTimeline}
           disabled={loading}
-          className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition"
+          className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Load Timeline</span>
         </button>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300">
+          {error}
+        </div>
+      )}
 
       {/* Timeline Stream */}
       <div className="space-y-4">
@@ -85,7 +97,7 @@ export default function TimelinePage({ initialTable = 'CUSTOMERS', initialPk = '
           </div>
         ) : (
           <div className="relative pl-6 border-l border-slate-800 space-y-6">
-            {timeline.map((entry, idx) => (
+            {timeline.map((entry) => (
               <div key={entry.change_id} className="relative group">
                 {/* Node pin */}
                 <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-slate-950 border-2 border-indigo-500 shadow-sm shadow-indigo-500/50" />
@@ -97,7 +109,7 @@ export default function TimelinePage({ initialTable = 'CUSTOMERS', initialPk = '
                         {entry.operation_type}
                       </span>
                       <span className="text-xs text-slate-300 font-mono">
-                        Commit #{entry.commit_order_seq} (Tx: {entry.tx_id || 'N/A'})
+                        Commit Order #{entry.commit_order_seq} &bull; Tx #{entry.tx_id || 'N/A'}
                       </span>
                     </div>
                     <span className="text-[11px] text-slate-400 font-mono">
@@ -107,33 +119,17 @@ export default function TimelinePage({ initialTable = 'CUSTOMERS', initialPk = '
 
                   {entry.changed_columns && (
                     <div className="text-xs text-slate-400">
-                      Modified columns: <strong className="text-indigo-300">{entry.changed_columns}</strong>
+                      Modified columns: <span className="text-indigo-300 font-semibold font-mono">{entry.changed_columns}</span>
                     </div>
                   )}
 
-                  {/* Before / After */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                    {entry.old_values && (
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
-                          Previous State
-                        </span>
-                        <pre className="font-mono text-[11px] text-slate-400 overflow-x-auto">
-                          {JSON.stringify(entry.old_values, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                    {entry.new_values && (
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider block mb-1">
-                          Resulting State
-                        </span>
-                        <pre className="font-mono text-[11px] text-emerald-300 overflow-x-auto">
-                          {JSON.stringify(entry.new_values, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
+                  {/* Relational SQL Mutation Diff Table instead of raw JSON */}
+                  <SqlMutationDiffTableView
+                    oldValues={entry.old_values}
+                    newValues={entry.new_values}
+                    changedColumns={entry.changed_columns}
+                    tableName={tableName}
+                  />
                 </div>
               </div>
             ))}

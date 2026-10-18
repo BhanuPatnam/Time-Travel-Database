@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { GitCompare, Play, PlusCircle, MinusCircle, Edit, AlertCircle } from 'lucide-react';
+import { GitCompare, Play, PlusCircle, MinusCircle, Edit, AlertCircle, Table } from 'lucide-react';
 import apiService from '../services/api';
+import { SqlMutationDiffTableView } from '../components/SqlRecordTableView';
 
 export default function DiffViewerPage() {
   const [tableName, setTableName] = useState('CUSTOMERS');
@@ -37,21 +38,28 @@ export default function DiffViewerPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-white">Historical Diff Viewer</h2>
-        <p className="text-xs text-slate-400">
-          Compute structural and row-level diffs between any two historical timestamps
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center space-x-2">
+            <h2 className="text-xl font-bold text-white">Historical Diff Viewer</h2>
+            <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] font-semibold uppercase">
+              SQL Relation Diffs
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Compare relational states between any two historical timestamps with structured SQL column diffs
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleCompare} className="glass-panel p-6 rounded-2xl space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Table</label>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Table</label>
             <select
               value={tableName}
               onChange={(e) => setTableName(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 cursor-pointer"
             >
               <option value="CUSTOMERS">CUSTOMERS</option>
               <option value="PRODUCTS">PRODUCTS</option>
@@ -86,10 +94,10 @@ export default function DiffViewerPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition disabled:opacity-50"
+            className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition disabled:opacity-50 cursor-pointer"
           >
             <GitCompare className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>{loading ? 'Computing Diff...' : 'Compare States'}</span>
+            <span>{loading ? 'Computing SQL Relational Diff...' : 'Compare Relational States'}</span>
           </button>
         </div>
       </form>
@@ -137,28 +145,48 @@ export default function DiffViewerPage() {
           </div>
 
           {/* List of changes */}
-          <div className="glass-panel p-5 rounded-2xl space-y-3">
-            <h3 className="text-sm font-semibold text-white mb-2">Detailed Row Mutations</h3>
+          <div className="glass-panel p-5 rounded-2xl space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-white">Relational Column-by-Column Mutations</h3>
+              <span className="text-xs text-slate-400">
+                Showing {diffResult.changes.length} row modifications
+              </span>
+            </div>
+
             {diffResult.changes.length === 0 ? (
               <p className="text-xs text-slate-500 py-6 text-center">
                 Zero structural or data modifications between the two selected timestamps.
               </p>
             ) : (
               diffResult.changes.map((item, idx) => (
-                <div key={idx} className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-200">
-                      Record PK: {item.record_pk}
-                    </span>
+                <div key={idx} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-950 text-indigo-300 font-mono font-bold text-xs">
+                        #{item.record_pk}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 uppercase">
+                        {item.operation_type}
+                      </span>
+                    </div>
                     <span className="text-[10px] text-slate-400 font-mono">
                       {new Date(item.change_timestamp).toLocaleString()}
                     </span>
                   </div>
+
                   {item.changed_columns && (
-                    <p className="text-slate-400 text-[11px]">
-                      Changed fields: <span className="text-indigo-300 font-medium">{item.changed_columns}</span>
+                    <p className="text-slate-400 text-xs">
+                      Altered Columns: <span className="text-indigo-300 font-semibold font-mono">{item.changed_columns}</span>
                     </p>
                   )}
+
+                  {/* Relational SQL Diff Table */}
+                  <SqlMutationDiffTableView
+                    oldValues={item.old_values}
+                    newValues={item.new_values}
+                    changedColumns={item.changed_columns}
+                    tableName={tableName}
+                  />
                 </div>
               ))
             )}

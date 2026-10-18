@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { RotateCcw, AlertTriangle, ShieldAlert, CheckCircle2, Eye, Play } from 'lucide-react';
 import apiService from '../services/api';
+import { SqlMutationDiffTableView } from '../components/SqlRecordTableView';
 
 export default function RestorationCenterPage() {
   const [tableName, setTableName] = useState('CUSTOMERS');
@@ -169,25 +170,12 @@ export default function RestorationCenterPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
-                Current Live State
-              </span>
-              <pre className="font-mono text-[11px] text-slate-400 overflow-x-auto max-h-48">
-                {JSON.stringify(preview.current_state, null, 2)}
-              </pre>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
-              <span className="text-[11px] font-semibold text-indigo-400 uppercase tracking-wider block mb-2">
-                Target Historical State
-              </span>
-              <pre className="font-mono text-[11px] text-indigo-300 overflow-x-auto max-h-48">
-                {JSON.stringify(preview.historical_state, null, 2)}
-              </pre>
-            </div>
-          </div>
+          {/* Relational SQL Mutation State Comparison */}
+          <SqlMutationDiffTableView
+            oldValues={preview.current_state}
+            newValues={preview.historical_state}
+            tableName={tableName}
+          />
 
           <div className="flex justify-end pt-3 border-t border-slate-800">
             <button
