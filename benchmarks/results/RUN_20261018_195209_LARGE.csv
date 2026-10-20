@@ -1,0 +1,4 @@
+run_id,strategy,workload_size,total_ops,avg_latency_ms,p95_latency_ms,avg_replayed,checkpoint_storage_bytes,write_tps,checkpoint_overhead_ms,correctness_pct
+RUN_20261018_195209_LARGE,LOG_ONLY,LARGE,200,0.134,0.14,2.2,0,16014.12,0.0,85.5
+RUN_20261018_195209_LARGE,FIXED_INTERVAL,LARGE,200,0.141,0.15,1.55,8779,17518.27,0.06,76.7
+RUN_20261018_195209_LARGE,ADAPTIVE,LARGE,200,0.145,0.157,1.63,12461,18039.37,11.25,87.4

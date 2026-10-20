@@ -35,13 +35,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <Navbar dbStatus={dbStatus} />
+    <div className="min-h-screen bg-[#F7F8FA] text-[#202833] flex flex-col font-sans">
+      <Navbar dbStatus={dbStatus} activeTab={activeTab} />
 
       <div className="flex flex-1">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-        <main className="flex-1 p-6 md:p-8 max-w-7xl mx-auto w-full overflow-y-auto">
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full overflow-y-auto">
           {activeTab === 'dashboard' && (
             <DashboardPage onNavigate={setActiveTab} onSelectRecord={handleSelectRecord} />
           )}

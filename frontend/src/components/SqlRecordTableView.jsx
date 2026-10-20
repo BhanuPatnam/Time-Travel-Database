@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Table, Code, Copy, Check, Eye } from 'lucide-react';
+import { Table, Code, Copy, Check } from 'lucide-react';
 
 const COLUMN_METADATA = {
   CUSTOMERS: {
@@ -32,15 +32,23 @@ const COLUMN_METADATA = {
     created_at: { type: 'TIMESTAMP(6) WITH TIME ZONE', category: 'timestamp' },
     updated_at: { type: 'TIMESTAMP(6) WITH TIME ZONE', category: 'timestamp' },
   },
+  ORDER_ITEMS: {
+    item_id: { type: 'NUMBER(10) PRIMARY KEY', category: 'key' },
+    order_id: { type: 'NUMBER(10) REFERENCES ORDERS', category: 'key' },
+    product_id: { type: 'NUMBER(10) REFERENCES PRODUCTS', category: 'key' },
+    quantity: { type: 'NUMBER(6) NOT NULL', category: 'number' },
+    unit_price: { type: 'NUMBER(10,2) NOT NULL', category: 'currency' },
+    subtotal: { type: 'NUMBER(12,2) NOT NULL', category: 'currency' },
+  }
 };
 
 export function formatSqlValue(val, category) {
   if (val === null || val === undefined) {
-    return <span className="font-mono text-slate-500 italic text-[11px]">NULL</span>;
+    return <span className="font-mono text-[#8C98A9] italic text-[11px]">NULL</span>;
   }
   if (category === 'currency') {
     return (
-      <span className="font-mono text-emerald-300 font-semibold text-xs">
+      <span className="font-mono text-[#34765A] font-semibold text-xs">
         ${Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </span>
     );
@@ -51,11 +59,11 @@ export function formatSqlValue(val, category) {
     const isDanger = ['INACTIVE', 'CANCELLED'].includes(String(val).toUpperCase());
 
     return (
-      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-        isSuccess ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50' :
-        isWarning ? 'bg-amber-950/60 text-amber-300 border-amber-800/50' :
-        isDanger ? 'bg-rose-950/60 text-rose-300 border-rose-800/50' :
-        'bg-slate-800 text-slate-300 border-slate-700'
+      <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+        isSuccess ? 'bg-[#EAF3EE] text-[#34765A] border-[#BDE0CE]' :
+        isWarning ? 'bg-[#FEF7EC] text-[#A66B16] border-[#F6E0B5]' :
+        isDanger ? 'bg-[#FDF2F2] text-[#B84F52] border-[#F8C8C9]' :
+        'bg-[#F0F2F5] text-[#202833] border-[#E2E6EC]'
       }`}>
         {String(val)}
       </span>
@@ -63,7 +71,7 @@ export function formatSqlValue(val, category) {
   }
   if (category === 'key') {
     return (
-      <span className="px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-800/40 text-indigo-300 font-mono text-xs font-semibold">
+      <span className="px-1.5 py-0.5 rounded bg-[#EDF3FC] border border-[#C8DCF7] text-[#4263A5] font-mono text-xs font-semibold">
         #{String(val)}
       </span>
     );
@@ -71,15 +79,15 @@ export function formatSqlValue(val, category) {
   if (category === 'timestamp') {
     const dateStr = new Date(val).toLocaleString();
     return (
-      <span className="font-mono text-[11px] text-slate-300">
+      <span className="font-mono text-[11px] text-[#202833]">
         {dateStr !== 'Invalid Date' ? dateStr : String(val)}
       </span>
     );
   }
   if (category === 'code') {
-    return <span className="font-mono text-amber-300 text-xs">{String(val)}</span>;
+    return <span className="font-mono text-[#A66B16] font-semibold text-xs">{String(val)}</span>;
   }
-  return <span className="text-slate-200 text-xs">{String(val)}</span>;
+  return <span className="text-[#202833] text-xs">{String(val)}</span>;
 }
 
 export function inferSqlType(key, val, tableName) {
@@ -99,7 +107,7 @@ export function inferCategory(key, val, tableName) {
   const tableMeta = COLUMN_METADATA[tableName] || {};
   if (tableMeta[key]) return tableMeta[key].category;
   if (key.endsWith('_id')) return 'key';
-  if (key.includes('price') || key.includes('amount') || key.includes('limit')) return 'currency';
+  if (key.includes('price') || key.includes('amount') || key.includes('limit') || key === 'subtotal') return 'currency';
   if (key === 'status') return 'enum';
   if (key.includes('date') || key.endsWith('_at')) return 'timestamp';
   return 'text';
@@ -114,13 +122,13 @@ export default function SqlRecordTableView({
   title = 'Materialized SQL Row State',
   badge = null
 }) {
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'json'
+  const [viewMode, setViewMode] = useState('table');
   const [copied, setCopied] = useState(false);
 
   if (!data || Object.keys(data).length === 0) {
     return (
-      <div className="p-8 rounded-2xl bg-slate-900/40 border border-dashed border-slate-800 text-center text-xs text-slate-500">
-        No relational data available to display.
+      <div className="p-6 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-center text-xs text-[#687386]">
+        No relational record state available for this timestamp.
       </div>
     );
   }
@@ -134,29 +142,28 @@ export default function SqlRecordTableView({
   };
 
   return (
-    <div className="space-y-3">
-      {/* Header bar with view toggle */}
+    <div className="space-y-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <Table className="w-4 h-4 text-indigo-400" />
-          <h4 className="text-xs font-semibold text-white tracking-wide uppercase">
+          <Table className="w-3.5 h-3.5 text-[#4263A5]" />
+          <h4 className="text-xs font-semibold text-[#202833] tracking-wide uppercase">
             {title}
           </h4>
           {badge && (
-            <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[10px] text-slate-300">
+            <span className="px-2 py-0.5 rounded bg-[#EDF3FC] border border-[#C8DCF7] text-[10px] font-mono text-[#4263A5]">
               {badge}
             </span>
           )}
         </div>
 
-        <div className="flex items-center space-x-1.5 bg-slate-900/90 border border-slate-800 p-0.5 rounded-xl">
+        <div className="flex items-center space-x-1 bg-[#F0F2F5] border border-[#E2E6EC] p-0.5 rounded-md">
           <button
             type="button"
             onClick={() => setViewMode('table')}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer ${
+            className={`flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
               viewMode === 'table'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#FFFFFF] text-[#4263A5] font-semibold shadow-xs'
+                : 'text-[#687386] hover:text-[#202833]'
             }`}
           >
             <Table className="w-3 h-3" />
@@ -165,51 +172,51 @@ export default function SqlRecordTableView({
           <button
             type="button"
             onClick={() => setViewMode('json')}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer ${
+            className={`flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
               viewMode === 'json'
-                ? 'bg-indigo-600 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-[#FFFFFF] text-[#4263A5] font-semibold shadow-xs'
+                : 'text-[#687386] hover:text-[#202833]'
             }`}
           >
             <Code className="w-3 h-3" />
-            <span>JSON</span>
+            <span>Raw JSON</span>
           </button>
           <button
             type="button"
             onClick={handleCopy}
-            className="p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer ml-1"
+            className="p-1 rounded text-[#687386] hover:text-[#202833] transition cursor-pointer ml-1"
             title="Copy state"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3 h-3 text-[#34765A]" /> : <Copy className="w-3 h-3" />}
           </button>
         </div>
       </div>
 
       {viewMode === 'table' ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 shadow-md">
+        <div className="overflow-x-auto rounded-lg border border-[#E2E6EC] bg-[#FFFFFF]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-900/90 border-b border-slate-800 text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-                <th className="py-2.5 px-4 w-1/4">Column Name</th>
-                <th className="py-2.5 px-4 w-1/4">Oracle SQL Data Type</th>
-                <th className="py-2.5 px-4 w-1/2">Materialized Value</th>
+              <tr className="bg-[#F3F5F7] border-b border-[#E2E6EC] text-[#687386] text-[11px] font-semibold uppercase tracking-wider">
+                <th className="py-2 px-3.5 w-1/4">Column Name</th>
+                <th className="py-2 px-3.5 w-1/3">Oracle SQL Type</th>
+                <th className="py-2 px-3.5">Reconstructed Value</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/50">
+            <tbody className="divide-y divide-[#E2E6EC]">
               {entries.map(([colName, val]) => {
                 const category = inferCategory(colName, val, tableName);
                 const sqlType = inferSqlType(colName, val, tableName);
                 return (
-                  <tr key={colName} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="py-2 px-4 font-mono font-medium text-slate-200 text-xs">
+                  <tr key={colName} className="hover:bg-[#F7F8FA] transition-colors">
+                    <td className="py-2 px-3.5 font-mono font-medium text-[#202833] text-xs">
                       {colName.toUpperCase()}
                     </td>
-                    <td className="py-2 px-4 font-mono text-[11px] text-slate-400">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800">
+                    <td className="py-2 px-3.5 font-mono text-[11px] text-[#687386]">
+                      <span className="px-1.5 py-0.5 rounded bg-[#F0F2F5] border border-[#E2E6EC]">
                         {sqlType}
                       </span>
                     </td>
-                    <td className="py-2 px-4">
+                    <td className="py-2 px-3.5">
                       {formatSqlValue(val, category)}
                     </td>
                   </tr>
@@ -219,7 +226,7 @@ export default function SqlRecordTableView({
           </table>
         </div>
       ) : (
-        <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-200 overflow-x-auto leading-relaxed">
+        <pre className="p-3.5 rounded-lg bg-[#F3F5F7] border border-[#E2E6EC] font-mono text-xs text-[#202833] overflow-x-auto leading-relaxed">
           {JSON.stringify(data, null, 2)}
         </pre>
       )}
@@ -240,7 +247,7 @@ export function SqlMultiRowTableView({
 
   if (!rows || rows.length === 0) {
     return (
-      <div className="p-8 rounded-2xl bg-slate-900/40 border border-dashed border-slate-800 text-center text-xs text-slate-500">
+      <div className="p-6 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-center text-xs text-[#687386]">
         Zero rows were active in {tableName} at the requested point in time.
       </div>
     );
@@ -255,21 +262,21 @@ export function SqlMultiRowTableView({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <Table className="w-4 h-4 text-indigo-400" />
-          <h4 className="text-xs font-semibold text-white tracking-wide uppercase">
+          <Table className="w-3.5 h-3.5 text-[#4263A5]" />
+          <h4 className="text-xs font-semibold text-[#202833] tracking-wide uppercase">
             {title} ({rows.length} {rows.length === 1 ? 'row' : 'rows'})
           </h4>
         </div>
 
-        <div className="flex items-center space-x-1.5 bg-slate-900/90 border border-slate-800 p-0.5 rounded-xl">
+        <div className="flex items-center space-x-1 bg-[#F0F2F5] border border-[#E2E6EC] p-0.5 rounded-md">
           <button
             type="button"
             onClick={() => setViewMode('table')}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer ${
-              viewMode === 'table' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            className={`flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
+              viewMode === 'table' ? 'bg-[#FFFFFF] text-[#4263A5] font-semibold shadow-xs' : 'text-[#687386] hover:text-[#202833]'
             }`}
           >
             <Table className="w-3 h-3" />
@@ -278,8 +285,8 @@ export function SqlMultiRowTableView({
           <button
             type="button"
             onClick={() => setViewMode('json')}
-            className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition cursor-pointer ${
-              viewMode === 'json' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
+            className={`flex items-center space-x-1 px-2.5 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
+              viewMode === 'json' ? 'bg-[#FFFFFF] text-[#4263A5] font-semibold shadow-xs' : 'text-[#687386] hover:text-[#202833]'
             }`}
           >
             <Code className="w-3 h-3" />
@@ -288,36 +295,36 @@ export function SqlMultiRowTableView({
           <button
             type="button"
             onClick={handleCopy}
-            className="p-1 rounded-lg text-slate-400 hover:text-white transition cursor-pointer ml-1"
+            className="p-1 rounded text-[#687386] hover:text-[#202833] transition cursor-pointer ml-1"
             title="Copy snapshot"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-3 h-3 text-[#34765A]" /> : <Copy className="w-3 h-3" />}
           </button>
         </div>
       </div>
 
       {viewMode === 'table' ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-800 shadow-md">
+        <div className="overflow-x-auto rounded-lg border border-[#E2E6EC] bg-[#FFFFFF]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-900/90 border-b border-slate-800 text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
-                <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
+              <tr className="bg-[#F3F5F7] border-b border-[#E2E6EC] text-[#687386] text-[11px] font-semibold uppercase tracking-wider">
+                <th className="py-2 px-3 w-10 text-[#8C98A9]">#</th>
                 {columns.map((col) => (
-                  <th key={col} className="py-2.5 px-4 font-mono">
+                  <th key={col} className="py-2 px-3 font-mono">
                     {col.toUpperCase()}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/50">
+            <tbody className="divide-y divide-[#E2E6EC]">
               {rows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="py-2 px-3 text-[10px] text-slate-500 font-mono">{idx + 1}</td>
+                <tr key={idx} className="hover:bg-[#F7F8FA] transition-colors">
+                  <td className="py-2 px-3 text-[10px] text-[#8C98A9] font-mono">{idx + 1}</td>
                   {columns.map((col) => {
                     const val = row[col];
                     const category = inferCategory(col, val, tableName);
                     return (
-                      <td key={col} className="py-2 px-4 whitespace-nowrap">
+                      <td key={col} className="py-2 px-3 whitespace-nowrap">
                         {formatSqlValue(val, category)}
                       </td>
                     );
@@ -328,7 +335,7 @@ export function SqlMultiRowTableView({
           </table>
         </div>
       ) : (
-        <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-200 overflow-x-auto max-h-96">
+        <pre className="p-3.5 rounded-lg bg-[#F3F5F7] border border-[#E2E6EC] font-mono text-xs text-[#202833] overflow-x-auto max-h-96">
           {JSON.stringify(rows, null, 2)}
         </pre>
       )}
@@ -356,7 +363,7 @@ export function SqlMutationDiffTableView({
 
   if (allKeys.length === 0) {
     return (
-      <div className="p-3 text-xs text-slate-500 text-center italic">
+      <div className="p-3 text-xs text-[#687386] text-center italic">
         No state payload captured for this transaction.
       </div>
     );
@@ -365,15 +372,15 @@ export function SqlMutationDiffTableView({
   return (
     <div className="space-y-2 mt-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+        <span className="text-[10px] font-semibold text-[#687386] uppercase tracking-wider">
           Column-by-Column SQL Mutation State
         </span>
-        <div className="flex items-center space-x-1 bg-slate-900 border border-slate-800 p-0.5 rounded-lg">
+        <div className="flex items-center space-x-1 bg-[#F0F2F5] border border-[#E2E6EC] p-0.5 rounded-md">
           <button
             type="button"
             onClick={() => setViewMode('table')}
             className={`px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer ${
-              viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              viewMode === 'table' ? 'bg-[#FFFFFF] text-[#4263A5] font-semibold shadow-xs' : 'text-[#687386] hover:text-[#202833]'
             }`}
           >
             SQL Table
@@ -382,7 +389,7 @@ export function SqlMutationDiffTableView({
             type="button"
             onClick={() => setViewMode('json')}
             className={`px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer ${
-              viewMode === 'json' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              viewMode === 'json' ? 'bg-[#FFFFFF] text-[#4263A5] font-semibold shadow-xs' : 'text-[#687386] hover:text-[#202833]'
             }`}
           >
             JSON
@@ -391,17 +398,17 @@ export function SqlMutationDiffTableView({
       </div>
 
       {viewMode === 'table' ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-800/80">
+        <div className="overflow-x-auto rounded-lg border border-[#E2E6EC] bg-[#FFFFFF]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-900/90 border-b border-slate-800 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              <tr className="bg-[#F3F5F7] border-b border-[#E2E6EC] text-[10px] font-semibold text-[#687386] uppercase tracking-wider">
                 <th className="py-2 px-3 w-1/4">Column</th>
-                <th className="py-2 px-3 w-1/3 text-rose-300">Previous State (Before)</th>
-                <th className="py-2 px-3 w-1/3 text-emerald-300">Resulting State (After)</th>
+                <th className="py-2 px-3 w-1/3 text-[#B84F52]">Previous State (Before)</th>
+                <th className="py-2 px-3 w-1/3 text-[#34765A]">Resulting State (After)</th>
                 <th className="py-2 px-3 text-right">Delta Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 bg-slate-950/60 font-mono text-[11px]">
+            <tbody className="divide-y divide-[#E2E6EC] font-mono text-[11px]">
               {allKeys.map((col) => {
                 const oldVal = oldValues ? oldValues[col] : null;
                 const newVal = newValues ? newValues[col] : null;
@@ -416,44 +423,44 @@ export function SqlMutationDiffTableView({
                 return (
                   <tr 
                     key={col} 
-                    className={isModified ? 'bg-indigo-950/20' : 'hover:bg-slate-800/20'}
+                    className={isModified ? 'bg-[#EDF3FC]' : 'hover:bg-[#F7F8FA]'}
                   >
-                    <td className="py-2 px-3 font-semibold text-slate-200">
+                    <td className="py-1.5 px-3 font-semibold text-[#202833]">
                       {col.toUpperCase()}
                     </td>
-                    <td className="py-2 px-3">
+                    <td className="py-1.5 px-3">
                       {isAdded ? (
-                        <span className="text-slate-500 italic text-[10px]">N/A (New Record)</span>
+                        <span className="text-[#8C98A9] italic text-[10px]">N/A (New Record)</span>
                       ) : (
-                        <span className={isModified ? 'text-rose-400' : 'text-slate-400'}>
+                        <span className={isModified ? 'text-[#B84F52]' : 'text-[#687386]'}>
                           {formatSqlValue(oldVal, category)}
                         </span>
                       )}
                     </td>
-                    <td className="py-2 px-3">
+                    <td className="py-1.5 px-3">
                       {isDeleted ? (
-                        <span className="text-rose-500 italic text-[10px]">TOMBSTONE (Deleted)</span>
+                        <span className="text-[#B84F52] italic text-[10px]">TOMBSTONE (Deleted)</span>
                       ) : (
-                        <span className={isModified ? 'text-emerald-300 font-bold' : 'text-slate-300'}>
+                        <span className={isModified ? 'text-[#34765A] font-bold' : 'text-[#202833]'}>
                           {formatSqlValue(newVal, category)}
                         </span>
                       )}
                     </td>
-                    <td className="py-2 px-3 text-right">
+                    <td className="py-1.5 px-3 text-right">
                       {isModified ? (
-                        <span className="px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/50 text-[9px] font-bold">
+                        <span className="px-1.5 py-0.5 rounded bg-[#EDF3FC] text-[#4263A5] border border-[#C8DCF7] text-[9px] font-bold">
                           MODIFIED
                         </span>
                       ) : isAdded ? (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/50 text-[9px] font-bold">
+                        <span className="px-1.5 py-0.5 rounded bg-[#EAF3EE] text-[#34765A] border border-[#BDE0CE] text-[9px] font-bold">
                           INSERTED
                         </span>
                       ) : isDeleted ? (
-                        <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800/50 text-[9px] font-bold">
+                        <span className="px-1.5 py-0.5 rounded bg-[#FDF2F2] text-[#B84F52] border border-[#F8C8C9] text-[9px] font-bold">
                           DELETED
                         </span>
                       ) : (
-                        <span className="text-slate-500 text-[10px]">UNCHANGED</span>
+                        <span className="text-[#8C98A9] text-[10px]">UNCHANGED</span>
                       )}
                     </td>
                   </tr>
@@ -464,15 +471,15 @@ export function SqlMutationDiffTableView({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">Old State</span>
-            <pre className="font-mono text-[10px] text-slate-400 overflow-x-auto">
+          <div className="p-2.5 rounded-lg bg-[#F3F5F7] border border-[#E2E6EC]">
+            <span className="text-[10px] text-[#687386] uppercase tracking-wider block mb-1">Old State</span>
+            <pre className="font-mono text-[10px] text-[#202833] overflow-x-auto">
               {JSON.stringify(oldValues, null, 2)}
             </pre>
           </div>
-          <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-            <span className="text-[10px] text-emerald-400 uppercase tracking-wider block mb-1">New State</span>
-            <pre className="font-mono text-[10px] text-emerald-300 overflow-x-auto">
+          <div className="p-2.5 rounded-lg bg-[#F3F5F7] border border-[#E2E6EC]">
+            <span className="text-[10px] text-[#34765A] uppercase tracking-wider block mb-1">New State</span>
+            <pre className="font-mono text-[10px] text-[#34765A] overflow-x-auto">
               {JSON.stringify(newValues, null, 2)}
             </pre>
           </div>

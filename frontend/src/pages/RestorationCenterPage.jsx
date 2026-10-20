@@ -61,18 +61,18 @@ export default function RestorationCenterPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white">Safe Historical Restoration</h2>
-        <p className="text-xs text-slate-400">
+        <h2 className="text-xl font-bold text-[#202833]">Safe Historical Restoration</h2>
+        <p className="text-xs text-[#687386]">
           Restore records to an earlier point in time safely as a new auditable transaction
         </p>
       </div>
 
       {/* Warning Box */}
-      <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-800/40 text-xs text-amber-200 flex items-start space-x-3">
-        <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+      <div className="p-4 rounded-lg bg-[#FDF8EE] border border-[#F7E5C0] text-xs text-[#A66B16] flex items-start space-x-3">
+        <ShieldAlert className="w-5 h-5 text-[#A66B16] shrink-0 mt-0.5" />
         <div>
-          <p className="font-bold text-amber-300">Safe Restoration Protocol</p>
-          <p className="mt-0.5 text-amber-400/90 leading-relaxed">
+          <p className="font-bold text-[#A66B16]">Safe Restoration Protocol</p>
+          <p className="mt-0.5 text-[#A66B16] leading-relaxed">
             Historical state is never deleted. Restoration creates a fresh, forward transaction
             that records the reversal in the audit log while validating all relational constraints.
           </p>
@@ -80,61 +80,62 @@ export default function RestorationCenterPage() {
       </div>
 
       {/* Target Selector */}
-      <form onSubmit={handlePreview} className="glass-panel p-6 rounded-2xl space-y-4">
+      <form onSubmit={handlePreview} className="content-panel p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Table</label>
+            <label className="block text-xs font-semibold text-[#202833] mb-1.5">Target Table</label>
             <select
               value={tableName}
               onChange={(e) => setTableName(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+              className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] focus:border-[#4263A5] outline-none cursor-pointer"
             >
               <option value="CUSTOMERS">CUSTOMERS</option>
               <option value="PRODUCTS">PRODUCTS</option>
               <option value="ORDERS">ORDERS</option>
+              <option value="ORDER_ITEMS">ORDER_ITEMS</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Record PK</label>
+            <label className="block text-xs font-semibold text-[#202833] mb-1.5">Record PK</label>
             <input
               type="text"
               value={recordPk}
               onChange={(e) => setRecordPk(e.target.value)}
               placeholder="e.g. 101"
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+              className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] focus:border-[#4263A5] outline-none font-mono"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Point-in-Time Target</label>
+            <label className="block text-xs font-semibold text-[#202833] mb-1.5">Point-in-Time Target</label>
             <input
               type="datetime-local"
               value={targetTimestamp}
               onChange={(e) => setTargetTimestamp(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+              className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] focus:border-[#4263A5] outline-none"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Audit Note / Reason</label>
+          <label className="block text-xs font-semibold text-[#202833] mb-1.5">Audit Note / Reason</label>
           <input
             type="text"
             value={userNote}
             onChange={(e) => setUserNote(e.target.value)}
             placeholder="Document reason for audit trail"
-            className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+            className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] focus:border-[#4263A5] outline-none"
           />
         </div>
 
-        <div className="flex justify-end pt-2 border-t border-slate-800">
+        <div className="flex justify-end pt-2 border-t border-[#E2E6EC]">
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition disabled:opacity-50"
+            className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-[#4263A5] hover:bg-[#3977A8] text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
           >
             <Eye className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>{loading ? 'Analyzing Impact...' : 'Preview Restoration Impact'}</span>
@@ -144,11 +145,11 @@ export default function RestorationCenterPage() {
 
       {/* Success Notification */}
       {restoreResult && (
-        <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60 text-xs text-emerald-200 flex items-start space-x-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+        <div className="p-4 rounded-lg bg-[#EDF6F1] border border-[#C6E4D4] text-xs text-[#34765A] flex items-start space-x-3">
+          <CheckCircle2 className="w-5 h-5 text-[#34765A] shrink-0 mt-0.5" />
           <div>
-            <p className="font-bold text-white text-sm">Restoration Committed Successfully</p>
-            <p className="mt-0.5 text-emerald-300">
+            <p className="font-bold text-[#34765A] text-sm">Restoration Committed Successfully</p>
+            <p className="mt-0.5 text-[#34765A]">
               {restoreResult.message} &bull; Recorded in Transaction #{restoreResult.tx_id}
             </p>
           </div>
@@ -157,16 +158,16 @@ export default function RestorationCenterPage() {
 
       {/* Preview Card */}
       {preview && (
-        <div className="glass-panel p-6 rounded-2xl space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="content-panel p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E2E6EC] pb-3">
             <div>
-              <h3 className="text-sm font-bold text-white">Proposed Restoration Analysis</h3>
-              <p className="text-xs text-slate-400">
-                Action: <strong className="text-indigo-400">{preview.proposed_action}</strong>
+              <h3 className="text-sm font-bold text-[#202833]">Proposed Restoration Analysis</h3>
+              <p className="text-xs text-[#687386]">
+                Action: <strong className="text-[#4263A5]">{preview.proposed_action}</strong>
               </p>
             </div>
-            <span className="px-3 py-1 rounded-full bg-slate-800 text-xs text-slate-300">
-              Constraint Check: <strong className="text-emerald-400">{preview.constraint_warning}</strong>
+            <span className="px-3 py-1 rounded-full bg-[#F0F2F5] text-xs text-[#202833] border border-[#E2E6EC]">
+              Constraint Check: <strong className="text-[#34765A]">{preview.constraint_warning}</strong>
             </span>
           </div>
 
@@ -177,10 +178,10 @@ export default function RestorationCenterPage() {
             tableName={tableName}
           />
 
-          <div className="flex justify-end pt-3 border-t border-slate-800">
+          <div className="flex justify-end pt-3 border-t border-[#E2E6EC]">
             <button
               onClick={() => setShowConfirmModal(true)}
-              className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/30 transition"
+              className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-[#B84F52] hover:bg-[#a64346] text-white text-xs font-bold shadow-sm transition cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Apply Restoration</span>
@@ -191,30 +192,30 @@ export default function RestorationCenterPage() {
 
       {/* Explicit Confirmation Modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-md rounded-2xl p-6 border border-rose-800/80 shadow-2xl space-y-4">
-            <div className="flex items-center space-x-3 text-rose-400">
+        <div className="fixed inset-0 z-50 bg-[#202833]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="content-panel w-full max-w-md p-6 border border-[#B84F52] shadow-xl space-y-4">
+            <div className="flex items-center space-x-3 text-[#B84F52]">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-base font-bold text-white">Confirm Data Restoration</h3>
+              <h3 className="text-base font-bold text-[#202833]">Confirm Data Restoration</h3>
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs text-[#202833] leading-relaxed">
               You are about to mutate current state of <strong>{tableName}[{recordPk}]</strong> to match its historical state at {new Date(targetTimestamp).toLocaleString()}.
             </p>
-            <p className="text-xs text-slate-400 bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono">
+            <p className="text-xs text-[#202833] bg-[#F7F8FA] p-3 rounded-lg border border-[#E2E6EC] font-mono">
               Action: {preview?.proposed_action}<br />
               Audit Note: &ldquo;{userNote}&rdquo;
             </p>
             <div className="flex items-center justify-end space-x-3 pt-2">
               <button
                 onClick={() => setShowConfirmModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+                className="px-4 py-2 rounded-lg bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-xs font-medium cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleExecuteRestore}
                 disabled={executing}
-                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md transition disabled:opacity-50"
+                className="px-5 py-2 rounded-lg bg-[#B84F52] hover:bg-[#a64346] text-white text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
               >
                 {executing ? 'Applying...' : 'Yes, Commit Restoration'}
               </button>

@@ -1,37 +1,70 @@
-import React from 'react';
-import { Database, Clock, Activity, ShieldCheck, Server } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Database, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
-export default function Navbar({ dbStatus }) {
+export default function Navbar({ dbStatus, activeTab = 'dashboard', onRefresh }) {
   const isConnected = dbStatus?.database_connected || false;
-  const dbType = dbStatus?.database_type || 'Connecting...';
+  const dbType = dbStatus?.database_type || (isConnected ? 'Oracle Database 21c XE' : 'Oracle Offline / Dev Fallback');
+  const [lastRefreshed, setLastRefreshed] = useState(new Date().toLocaleTimeString());
+  const [refreshing, setRefreshing] = useState(false);
+
+  const tabTitles = {
+    dashboard: 'Database / Overview',
+    data: 'Database / Live Tables',
+    timetravel: 'Time Travel / Point-in-Time Explorer',
+    timeline: 'Time Travel / Version Timeline',
+    diff: 'Time Travel / Historical Diff',
+    checkpoints: 'Performance / Checkpoints & Policy',
+    benchmarks: 'Performance / Benchmarks',
+    restoration: 'Operations / Restoration Center',
+    settings: 'Operations / Settings & Connection',
+  };
+
+  const handleRefreshClick = async () => {
+    setRefreshing(true);
+    if (onRefresh) {
+      await onRefresh();
+    }
+    setLastRefreshed(new Date().toLocaleTimeString());
+    setTimeout(() => setRefreshing(false), 300);
+  };
 
   return (
-    <header className="h-16 border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40 px-6 flex items-center justify-between">
+    <header className="h-14 border-b border-[#E2E6EC] bg-[#FFFFFF] sticky top-0 z-40 px-6 flex items-center justify-between">
+      {/* Breadcrumb / Title */}
       <div className="flex items-center space-x-3">
-        <div className="p-2 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-lg shadow-indigo-500/30">
-          <Clock className="w-5 h-5 animate-pulse" />
+        <div className="flex items-center space-x-2">
+          <Database className="w-4 h-4 text-[#4263A5]" />
+          <span className="font-semibold text-sm text-[#202833]">Time Travel DB</span>
         </div>
-        <div>
-          <h1 className="text-base font-bold bg-gradient-to-r from-indigo-200 via-white to-slate-300 bg-clip-text text-transparent">
-            Time Travel Database
-          </h1>
-          <p className="text-xs text-slate-400">
-            Adaptive Checkpointing &amp; Historical Reconstruction Engine
-          </p>
-        </div>
+        <span className="text-[#CBD5E1]">/</span>
+        <span className="text-xs font-medium text-[#687386]">
+          {tabTitles[activeTab] || 'Console'}
+        </span>
       </div>
 
-      <div className="flex items-center space-x-4">
-        {/* Connection status pill */}
-        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs">
-          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 shadow-sm shadow-emerald-400' : 'bg-amber-400 shadow-sm shadow-amber-400'}`} />
-          <Server className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-slate-200 font-medium">{dbType}</span>
+      {/* Right Controls: Refresh & Oracle Connection Status */}
+      <div className="flex items-center space-x-3">
+        <div className="hidden md:flex items-center space-x-1.5 text-xs text-[#687386]">
+          <span>Updated:</span>
+          <span className="font-mono text-[#202833]">{lastRefreshed}</span>
         </div>
 
-        <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-indigo-950/40 border border-indigo-800/40 text-xs text-indigo-300 font-medium">
-          <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Oracle 21c XE Engine</span>
+        <button
+          onClick={handleRefreshClick}
+          disabled={refreshing}
+          className="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E4E8EE] text-[#202833] text-xs font-medium border border-[#E2E6EC] transition cursor-pointer"
+          title="Refresh current state"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-[#687386] ${refreshing ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
+
+        {/* Oracle connection indicator */}
+        <div className="flex items-center space-x-2 px-2.5 py-1 rounded-md bg-[#F0F2F5] border border-[#E2E6EC] text-xs">
+          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#34765A]' : 'bg-[#A66B16]'}`} />
+          <span className="font-mono text-[11px] font-medium text-[#202833]">
+            {isConnected ? 'Oracle 21c (Connected)' : 'Dev Fallback (Offline)'}
+          </span>
         </div>
       </div>
     </header>

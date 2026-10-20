@@ -33,6 +33,7 @@ SQL_SCRIPTS = [
     "08_create_diff_and_restore.sql",       # TT_DIFF_RESTORE_PKG
     "09_seed_data.sql",                     # Seed and initial baseline checkpoints
     "10_create_benchmark_objects.sql",      # Benchmark results schema
+    "14_run_benchmarks.sql",                # TT_BENCHMARK_PKG (Pure PL/SQL benchmark suite)
     "11_verify_installation.sql",           # Verification script
 ]
 

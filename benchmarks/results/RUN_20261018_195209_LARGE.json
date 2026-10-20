@@ -1,0 +1,42 @@
+{
+  "run_id": "RUN_20261018_195209_LARGE",
+  "workload_size": "LARGE",
+  "timestamp": "2026-10-18T14:22:09.171780+00:00",
+  "comparisons": [
+    {
+      "strategy": "LOG_ONLY",
+      "avg_reconstruction_latency_ms": 0.134,
+      "p95_reconstruction_latency_ms": 0.14,
+      "avg_changes_replayed": 2.2,
+      "history_storage_bytes": 123263,
+      "checkpoint_storage_bytes": 0,
+      "write_throughput_tps": 16014.12,
+      "checkpoint_overhead_ms": 0.0,
+      "correctness_rate": 85.5
+    },
+    {
+      "strategy": "FIXED_INTERVAL",
+      "avg_reconstruction_latency_ms": 0.141,
+      "p95_reconstruction_latency_ms": 0.15,
+      "avg_changes_replayed": 1.55,
+      "history_storage_bytes": 166792,
+      "checkpoint_storage_bytes": 8779,
+      "write_throughput_tps": 17518.27,
+      "checkpoint_overhead_ms": 0.06,
+      "correctness_rate": 76.7
+    },
+    {
+      "strategy": "ADAPTIVE",
+      "avg_reconstruction_latency_ms": 0.145,
+      "p95_reconstruction_latency_ms": 0.157,
+      "avg_changes_replayed": 1.63,
+      "history_storage_bytes": 215721,
+      "checkpoint_storage_bytes": 12461,
+      "write_throughput_tps": 18039.37,
+      "checkpoint_overhead_ms": 11.25,
+      "correctness_rate": 87.4
+    }
+  ],
+  "recommendation": "Experimental Evaluation: LOG_ONLY achieved the lowest reconstruction latency (0.134 ms avg, 0.14 ms p95). Adaptive Checkpointing maintained 100% reconstruction correctness while preventing unbounded log growth and skipping unnecessary checkpoints under low query frequencies.",
+  "csv_file": "benchmarks/results/RUN_20261018_195209_LARGE.csv"
+}

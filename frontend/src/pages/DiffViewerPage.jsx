@@ -41,60 +41,61 @@ export default function DiffViewerPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center space-x-2">
-            <h2 className="text-xl font-bold text-white">Historical Diff Viewer</h2>
-            <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[10px] font-semibold uppercase">
+            <h2 className="text-xl font-bold text-[#202833]">Historical Diff Viewer</h2>
+            <span className="px-2 py-0.5 rounded-full bg-[#EDF3FC] border border-[#D0E0F6] text-[#4263A5] text-[10px] font-semibold uppercase">
               SQL Relation Diffs
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[#687386] mt-0.5">
             Compare relational states between any two historical timestamps with structured SQL column diffs
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleCompare} className="glass-panel p-6 rounded-2xl space-y-4">
+      <form onSubmit={handleCompare} className="content-panel p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Table</label>
+            <label className="block text-xs font-semibold text-[#202833] mb-1.5">Target Table</label>
             <select
               value={tableName}
               onChange={(e) => setTableName(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 cursor-pointer"
+              className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] focus:border-[#4263A5] outline-none cursor-pointer"
             >
               <option value="CUSTOMERS">CUSTOMERS</option>
               <option value="PRODUCTS">PRODUCTS</option>
               <option value="ORDERS">ORDERS</option>
+              <option value="ORDER_ITEMS">ORDER_ITEMS</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Baseline Timestamp (T1)</label>
+            <label className="block text-xs font-semibold text-[#202833] mb-1.5">Baseline Timestamp (T1)</label>
             <input
               type="datetime-local"
               value={t1}
               onChange={(e) => setT1(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+              className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] focus:border-[#4263A5] outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Comparison Timestamp (T2)</label>
+            <label className="block text-xs font-semibold text-[#202833] mb-1.5">Comparison Timestamp (T2)</label>
             <input
               type="datetime-local"
               value={t2}
               onChange={(e) => setT2(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+              className="w-full px-3 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] focus:border-[#4263A5] outline-none"
             />
           </div>
         </div>
 
-        <div className="flex justify-end pt-2 border-t border-slate-800">
+        <div className="flex justify-end pt-2 border-t border-[#E2E6EC]">
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition disabled:opacity-50 cursor-pointer"
+            className="flex items-center space-x-2 px-5 py-2.5 rounded-lg bg-[#4263A5] hover:bg-[#3977A8] text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
           >
             <GitCompare className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>{loading ? 'Computing SQL Relational Diff...' : 'Compare Relational States'}</span>
@@ -103,7 +104,7 @@ export default function DiffViewerPage() {
       </form>
 
       {error && (
-        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-center space-x-2">
+        <div className="p-4 rounded-lg bg-[#FDF3F3] border border-[#F9D5D6] text-xs text-[#B84F52] flex items-center space-x-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -113,70 +114,70 @@ export default function DiffViewerPage() {
         <div className="space-y-4">
           {/* Summary counters */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="glass-panel p-4 rounded-2xl flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-emerald-950/60 text-emerald-400 border border-emerald-800/40">
+            <div className="content-panel p-4 flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-[#EDF6F1] text-[#34765A] border border-[#C6E4D4]">
                 <PlusCircle className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-xs text-slate-400">Added Rows</span>
-                <p className="text-xl font-bold text-white">{diffResult.added_count}</p>
+                <span className="text-xs text-[#687386]">Added Rows</span>
+                <p className="text-xl font-bold text-[#202833]">{diffResult.added_count}</p>
               </div>
             </div>
 
-            <div className="glass-panel p-4 rounded-2xl flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-sky-950/60 text-sky-400 border border-sky-800/40">
+            <div className="content-panel p-4 flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-[#EDF3FC] text-[#4263A5] border border-[#D0E0F6]">
                 <Edit className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-xs text-slate-400">Modified Rows</span>
-                <p className="text-xl font-bold text-white">{diffResult.modified_count}</p>
+                <span className="text-xs text-[#687386]">Modified Rows</span>
+                <p className="text-xl font-bold text-[#202833]">{diffResult.modified_count}</p>
               </div>
             </div>
 
-            <div className="glass-panel p-4 rounded-2xl flex items-center space-x-3">
-              <div className="p-2 rounded-xl bg-rose-950/60 text-rose-400 border border-rose-800/40">
+            <div className="content-panel p-4 flex items-center space-x-3">
+              <div className="p-2 rounded-lg bg-[#FDF3F3] text-[#B84F52] border border-[#F9D5D6]">
                 <MinusCircle className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-xs text-slate-400">Deleted Rows</span>
-                <p className="text-xl font-bold text-white">{diffResult.deleted_count}</p>
+                <span className="text-xs text-[#687386]">Deleted Rows</span>
+                <p className="text-xl font-bold text-[#202833]">{diffResult.deleted_count}</p>
               </div>
             </div>
           </div>
 
           {/* List of changes */}
-          <div className="glass-panel p-5 rounded-2xl space-y-4">
+          <div className="content-panel p-5 space-y-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-white">Relational Column-by-Column Mutations</h3>
-              <span className="text-xs text-slate-400">
+              <h3 className="text-sm font-semibold text-[#202833]">Relational Column-by-Column Mutations</h3>
+              <span className="text-xs text-[#687386]">
                 Showing {diffResult.changes.length} row modifications
               </span>
             </div>
 
             {diffResult.changes.length === 0 ? (
-              <p className="text-xs text-slate-500 py-6 text-center">
+              <p className="text-xs text-[#687386] py-6 text-center">
                 Zero structural or data modifications between the two selected timestamps.
               </p>
             ) : (
               diffResult.changes.map((item, idx) => (
-                <div key={idx} className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div key={idx} className="p-4 rounded-lg bg-[#F7F8FA] border border-[#E2E6EC] text-xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-[#E2E6EC] pb-2">
                     <div className="flex items-center space-x-2">
-                      <span className="px-2 py-0.5 rounded-md bg-indigo-950 text-indigo-300 font-mono font-bold text-xs">
+                      <span className="px-2 py-0.5 rounded-md bg-[#EDF3FC] text-[#4263A5] border border-[#D0E0F6] font-mono font-bold text-xs">
                         #{item.record_pk}
                       </span>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 uppercase">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#FFFFFF] border border-[#E2E6EC] text-[#202833] uppercase">
                         {item.operation_type}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 font-mono">
+                    <span className="text-[10px] text-[#687386] font-mono">
                       {new Date(item.change_timestamp).toLocaleString()}
                     </span>
                   </div>
 
                   {item.changed_columns && (
-                    <p className="text-slate-400 text-xs">
-                      Altered Columns: <span className="text-indigo-300 font-semibold font-mono">{item.changed_columns}</span>
+                    <p className="text-[#687386] text-xs">
+                      Altered Columns: <span className="text-[#4263A5] font-semibold font-mono">{item.changed_columns}</span>
                     </p>
                   )}
 
