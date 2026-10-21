@@ -63,7 +63,7 @@ class TimelineEntry(BaseModel):
     tx_id: Optional[int] = None
     operation_type: str
     changed_columns: Optional[str] = None
-    change_timestamp: str
+    change_timestamp: Union[datetime, str]
     commit_order_seq: int
     old_values: Optional[Dict[str, Any]] = None
     new_values: Optional[Dict[str, Any]] = None
@@ -85,7 +85,7 @@ class DiffChangeItem(BaseModel):
     record_pk: str
     operation_type: str
     changed_columns: Optional[str] = None
-    change_timestamp: str
+    change_timestamp: Union[datetime, str]
     old_values: Optional[Dict[str, Any]] = None
     new_values: Optional[Dict[str, Any]] = None
 
