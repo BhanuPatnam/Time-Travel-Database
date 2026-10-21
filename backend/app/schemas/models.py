@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 # 1. Health & Status
@@ -103,14 +103,14 @@ class CheckpointItem(BaseModel):
     checkpoint_id: int
     checkpoint_name: str
     table_name: str
-    target_boundary_ts: str
+    target_boundary_ts: Union[datetime, str]
     strategy_used: str
     status: str
     row_count: int
     storage_bytes: int
     creation_duration_ms: float
     decision_reason: Optional[str] = None
-    created_at: str
+    created_at: Union[datetime, str]
 
 class CreateCheckpointRequest(BaseModel):
     table_name: str
@@ -119,7 +119,7 @@ class CreateCheckpointRequest(BaseModel):
 
 class PolicyDecisionItem(BaseModel):
     decision_id: int
-    evaluated_at: str
+    evaluated_at: Union[datetime, str]
     table_name: str
     changes_since_last_cp: int
     estimated_replay_cost_ms: float
