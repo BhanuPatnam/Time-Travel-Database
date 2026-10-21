@@ -12,7 +12,8 @@ services:
       - "1521:1521"
     volumes:
       - oracle-data:/opt/oracle/oradata
-      - ./database:/container-entrypoint-initdb.d:ro
+      - ./database:/tmp/database:ro
+      - ./scripts/docker_init_oracle.sh:/container-entrypoint-initdb.d/docker_init_oracle.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s tt_admin/tt_secret_123@//localhost:1521/XEPDB1 || exit 1"]
       interval: 15s
@@ -45,6 +46,7 @@ services:
       dockerfile: Dockerfile
     container_name: timetravel-frontend
     ports:
+      - "80:80"
       - "3000:80"
     depends_on:
       - backend
