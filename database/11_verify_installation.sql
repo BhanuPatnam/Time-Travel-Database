@@ -66,7 +66,7 @@ BEGIN
     -- Reconstruct row as of v_test_ts
     v_reconstructed := TT_RECONSTRUCTION_PKG.reconstruct_row('CUSTOMERS', TO_CHAR(v_cust_id), v_test_ts, 'ADAPTIVE');
     DBMS_OUTPUT.PUT_LINE('  Reconstructed historical state:');
-    DBMS_OUTPUT.PUT_LINE(SUBSTR(v_reconstructed, 1, 250) || '...');
+    DBMS_OUTPUT.PUT_LINE(DBMS_LOB.SUBSTR(v_reconstructed, 250, 1) || '...');
 
     -- Clean up verification record
     DELETE FROM CUSTOMERS WHERE customer_id = v_cust_id;

@@ -13,6 +13,12 @@ CREATE OR REPLACE PACKAGE TT_CHECKPOINT_PKG AS
         p_reason     IN VARCHAR2 DEFAULT 'Manual request'
     ) RETURN NUMBER;
 
+    PROCEDURE create_checkpoint(
+        p_table_name IN VARCHAR2,
+        p_strategy   IN VARCHAR2 DEFAULT 'MANUAL',
+        p_reason     IN VARCHAR2 DEFAULT 'Manual request'
+    );
+
     -- Adaptive & Fixed-Interval Policy evaluation
     FUNCTION evaluate_adaptive_policy(p_table_name IN VARCHAR2) RETURN VARCHAR2;
     FUNCTION evaluate_fixed_interval_policy(p_table_name IN VARCHAR2) RETURN VARCHAR2;
@@ -49,6 +55,7 @@ CREATE OR REPLACE PACKAGE BODY TT_CHECKPOINT_PKG AS
         v_row_count NUMBER := 0;
         v_storage_bytes NUMBER := 0;
         v_tbl VARCHAR2(60) := UPPER(p_table_name);
+        v_sqlerrm VARCHAR2(1000);
     BEGIN
         v_start_time := DBMS_UTILITY.GET_TIME;
         v_boundary_ts := SYSTIMESTAMP;
@@ -150,12 +157,23 @@ CREATE OR REPLACE PACKAGE BODY TT_CHECKPOINT_PKG AS
 
     EXCEPTION WHEN OTHERS THEN
         ROLLBACK;
+        v_sqlerrm := SUBSTR(SQLERRM, 1, 900);
         UPDATE TT_CHECKPOINTS
         SET status = 'FAILED',
-            decision_reason = 'Error: ' || SQLERRM
+            decision_reason = 'Error: ' || v_sqlerrm
         WHERE checkpoint_id = v_cp_id;
         COMMIT;
         RAISE;
+    END create_checkpoint;
+
+    PROCEDURE create_checkpoint(
+        p_table_name IN VARCHAR2,
+        p_strategy   IN VARCHAR2 DEFAULT 'MANUAL',
+        p_reason     IN VARCHAR2 DEFAULT 'Manual request'
+    ) IS
+        v_id NUMBER;
+    BEGIN
+        v_id := create_checkpoint(p_table_name, p_strategy, p_reason);
     END create_checkpoint;
 
     PROCEDURE get_latest_valid_checkpoint(

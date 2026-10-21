@@ -147,6 +147,7 @@ CREATE OR REPLACE PACKAGE BODY TT_DIFF_RESTORE_PKG AS
         v_row_json CLOB;
         v_status VARCHAR2(20) := 'SUCCESS';
         v_message VARCHAR2(500) := 'Restoration applied successfully as a new transaction';
+        v_err_msg VARCHAR2(1000);
     BEGIN
         v_tx_id := TT_CORE_PKG.get_or_create_tx('RESTORE_' || v_tbl || '_' || p_record_pk);
 
@@ -217,12 +218,13 @@ CREATE OR REPLACE PACKAGE BODY TT_DIFF_RESTORE_PKG AS
         );
     EXCEPTION WHEN OTHERS THEN
         ROLLBACK;
+        v_err_msg := SUBSTR(SQLERRM, 1, 900);
         IF v_tx_id IS NOT NULL THEN
             TT_CORE_PKG.mark_tx_rollback(v_tx_id);
         END IF;
         RETURN JSON_OBJECT(
             'status'  VALUE 'FAILED',
-            'error'   VALUE SQLERRM,
+            'error'   VALUE v_err_msg,
             'message' VALUE 'Restoration rolled back without partial application'
         );
     END execute_restore;

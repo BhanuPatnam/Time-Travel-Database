@@ -84,14 +84,18 @@ CREATE OR REPLACE PACKAGE BODY TT_BENCHMARK_PKG AS
         FOR i IN 1..p_num_writes LOOP
             UPDATE CUSTOMERS 
             SET credit_limit = credit_limit + 100.00,
-                status = CASE WHEN MOD(i, 5) = 0 THEN 'VIP' ELSE 'ACTIVE' END
+                status = CASE WHEN MOD(i, 5) = 0 THEN 'SUSPENDED' ELSE 'ACTIVE' END
             WHERE customer_id = v_cust_id;
             COMMIT;
 
             -- Trigger checkpoints under fixed-interval policy if configured
             IF MOD(i, 20) = 0 THEN
                 BEGIN
-                    TT_CHECKPOINT_PKG.create_checkpoint(v_tbl, 'FIXED_INTERVAL', 'Benchmark interval threshold');
+                    DECLARE
+                        v_cp_id NUMBER;
+                    BEGIN
+                        v_cp_id := TT_CHECKPOINT_PKG.create_checkpoint(v_tbl, 'FIXED_INTERVAL', 'Benchmark interval threshold');
+                    END;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
             END IF;

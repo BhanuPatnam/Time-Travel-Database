@@ -9,6 +9,7 @@ SET SERVEROUTPUT ON SIZE UNLIMITED;
 SET LINESIZE 220;
 SET PAGESIZE 100;
 SET FEEDBACK ON;
+SET DEFINE OFF;
 
 COLUMN customer_id FORMAT 9999;
 COLUMN name FORMAT A25;
@@ -53,9 +54,9 @@ ORDER BY commit_order_seq DESC;
 -- DEMO STEP 3: Update Customer Information & Commit
 -- ----------------------------------------------------------------------------
 PROMPT
-PROMPT >>> STEP 3: Updating Customer #701 (Credit Limit 65,000 -> 90,000, Status -> VIP)...
+PROMPT >>> STEP 3: Updating Customer #701 (Credit Limit 65,000 -> 90,000, Status -> SUSPENDED)...
 UPDATE CUSTOMERS 
-SET credit_limit = 90000.00, status = 'VIP'
+SET credit_limit = 90000.00, status = 'SUSPENDED'
 WHERE customer_id = 701;
 COMMIT;
 
@@ -109,9 +110,9 @@ PROMPT
 PROMPT >>> STEP 6: Creating a Materialized Consistent Checkpoint for CUSTOMERS...
 BEGIN
     TT_CHECKPOINT_PKG.create_checkpoint(
-        p_table_name      => 'CUSTOMERS',
-        p_strategy_used   => 'MANUAL',
-        p_creation_reason => 'Instructor Live Demonstration Boundary'
+        p_table_name => 'CUSTOMERS',
+        p_strategy   => 'MANUAL',
+        p_reason     => 'Instructor Live Demonstration Boundary'
     );
 END;
 /
@@ -214,9 +215,9 @@ ORDER BY jt.customer_id;
 PROMPT
 PROMPT >>> STEP 10: Comparing Historical States Between 1 Hour Ago (T1) and Now (T2)...
 SELECT TT_DIFF_RESTORE_PKG.compare_states(
-    p_table_name   => 'CUSTOMERS',
-    p_timestamp_1  => SYSTIMESTAMP - INTERVAL '1' HOUR,
-    p_timestamp_2  => SYSTIMESTAMP
+    p_table_name => 'CUSTOMERS',
+    p_ts1        => SYSTIMESTAMP - INTERVAL '1' HOUR,
+    p_ts2        => SYSTIMESTAMP
 ) AS diff_analysis_json
 FROM DUAL;
 
@@ -226,9 +227,9 @@ FROM DUAL;
 PROMPT
 PROMPT >>> STEP 11: Safe Forward Restoration Preview (Customer #101 back to 1 Hour Ago)...
 SELECT TT_DIFF_RESTORE_PKG.preview_restore(
-    p_table_name       => 'CUSTOMERS',
-    p_record_pk        => '101',
-    p_target_timestamp => SYSTIMESTAMP - INTERVAL '1' HOUR
+    p_table_name => 'CUSTOMERS',
+    p_record_pk  => '101',
+    p_target_ts  => SYSTIMESTAMP - INTERVAL '1' HOUR
 ) AS restoration_preview_sql
 FROM DUAL;
 
