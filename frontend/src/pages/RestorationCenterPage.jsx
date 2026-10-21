@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { RotateCcw, AlertTriangle, ShieldAlert, CheckCircle2, Eye, Play } from 'lucide-react';
+import { RotateCcw, AlertTriangle, ShieldAlert, CheckCircle2, Eye, Play, Clock } from 'lucide-react';
 import apiService from '../services/api';
 import { SqlMutationDiffTableView } from '../components/SqlRecordTableView';
+import { toLocalDateTimeInputValue, localInputToIsoUtc, getLocalOffsetTimeString, formatFriendlyDateTime } from '../utils/timeUtils';
 
 export default function RestorationCenterPage() {
   const [tableName, setTableName] = useState('CUSTOMERS');
   const [recordPk, setRecordPk] = useState('101');
-  const defaultTs = new Date(Date.now() - 60 * 60 * 1000).toISOString().slice(0, 16);
-  const [targetTimestamp, setTargetTimestamp] = useState(defaultTs);
+  const [targetTimestamp, setTargetTimestamp] = useState(() => getLocalOffsetTimeString(15));
   const [userNote, setUserNote] = useState('Historical operational rollback');
 
   const [preview, setPreview] = useState(null);
@@ -28,7 +28,7 @@ export default function RestorationCenterPage() {
       const data = await apiService.previewRestore(
         tableName,
         recordPk,
-        new Date(targetTimestamp).toISOString()
+        localInputToIsoUtc(targetTimestamp)
       );
       setPreview(data);
     } catch (err) {
@@ -44,7 +44,7 @@ export default function RestorationCenterPage() {
       const res = await apiService.executeRestore(
         tableName,
         recordPk,
-        new Date(targetTimestamp).toISOString(),
+        localInputToIsoUtc(targetTimestamp),
         userNote,
         true
       );
@@ -131,7 +131,41 @@ export default function RestorationCenterPage() {
           />
         </div>
 
-        <div className="flex justify-end pt-2 border-t border-[#E2E6EC]">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#E2E6EC]">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[#687386] flex items-center mr-1">
+              <Clock className="w-3.5 h-3.5 mr-1" /> Quick Presets:
+            </span>
+            <button
+              type="button"
+              onClick={() => setTargetTimestamp(getLocalOffsetTimeString(5))}
+              className="px-2 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-[11px] border border-[#E2E6EC] cursor-pointer"
+            >
+              5m ago
+            </button>
+            <button
+              type="button"
+              onClick={() => setTargetTimestamp(getLocalOffsetTimeString(15))}
+              className="px-2 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-[11px] border border-[#E2E6EC] cursor-pointer"
+            >
+              15m ago
+            </button>
+            <button
+              type="button"
+              onClick={() => setTargetTimestamp(getLocalOffsetTimeString(60))}
+              className="px-2 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-[11px] border border-[#E2E6EC] cursor-pointer"
+            >
+              1h ago
+            </button>
+            <button
+              type="button"
+              onClick={() => setTargetTimestamp(getLocalOffsetTimeString(600))}
+              className="px-2 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-[11px] border border-[#E2E6EC] cursor-pointer"
+            >
+              Demo Start
+            </button>
+          </div>
+
           <button
             type="submit"
             disabled={loading}

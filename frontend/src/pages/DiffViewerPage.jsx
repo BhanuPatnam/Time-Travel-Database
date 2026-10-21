@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
-import { GitCompare, Play, PlusCircle, MinusCircle, Edit, AlertCircle, Table } from 'lucide-react';
+import { GitCompare, Play, PlusCircle, MinusCircle, Edit, AlertCircle, Table, Clock } from 'lucide-react';
 import apiService from '../services/api';
 import { SqlMutationDiffTableView } from '../components/SqlRecordTableView';
+import { toLocalDateTimeInputValue, localInputToIsoUtc, getLocalOffsetTimeString, formatFriendlyDateTime } from '../utils/timeUtils';
 
 export default function DiffViewerPage() {
   const [tableName, setTableName] = useState('CUSTOMERS');
   
-  // T1: 90 mins ago, T2: now
-  const defaultT1 = new Date(Date.now() - 90 * 60 * 1000).toISOString().slice(0, 16);
-  const defaultT2 = new Date().toISOString().slice(0, 16);
-
-  const [t1, setT1] = useState(defaultT1);
-  const [t2, setT2] = useState(defaultT2);
+  // T1: 30 mins ago, T2: current local time
+  const [t1, setT1] = useState(() => getLocalOffsetTimeString(30));
+  const [t2, setT2] = useState(() => toLocalDateTimeInputValue(new Date()));
   const [loading, setLoading] = useState(false);
   const [diffResult, setDiffResult] = useState(null);
   const [error, setError] = useState(null);
@@ -25,8 +23,8 @@ export default function DiffViewerPage() {
     try {
       const data = await apiService.compareStates(
         tableName,
-        new Date(t1).toISOString(),
-        new Date(t2).toISOString()
+        localInputToIsoUtc(t1),
+        localInputToIsoUtc(t2)
       );
       setDiffResult(data);
     } catch (err) {
@@ -91,7 +89,43 @@ export default function DiffViewerPage() {
           </div>
         </div>
 
-        <div className="flex justify-end pt-2 border-t border-[#E2E6EC]">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#E2E6EC]">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[#687386] flex items-center mr-1">
+              <Clock className="w-3.5 h-3.5 mr-1" /> Quick Presets:
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setT1(getLocalOffsetTimeString(15));
+                setT2(toLocalDateTimeInputValue(new Date()));
+              }}
+              className="px-2.5 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-[11px] border border-[#E2E6EC] cursor-pointer"
+            >
+              Last 15m vs Now
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setT1(getLocalOffsetTimeString(60));
+                setT2(toLocalDateTimeInputValue(new Date()));
+              }}
+              className="px-2.5 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-[11px] border border-[#E2E6EC] cursor-pointer"
+            >
+              Last 1h vs Now
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setT1(getLocalOffsetTimeString(600));
+                setT2(toLocalDateTimeInputValue(new Date()));
+              }}
+              className="px-2.5 py-1 rounded-md bg-[#F0F2F5] hover:bg-[#E2E6EC] text-[#202833] text-[11px] border border-[#E2E6EC] cursor-pointer"
+            >
+              Demo Start vs Now
+            </button>
+          </div>
+
           <button
             type="submit"
             disabled={loading}

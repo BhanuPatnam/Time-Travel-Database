@@ -42,6 +42,13 @@ export const apiService = {
       strategy,
     }).then(res => res.data),
 
+  reconstructDatabase: (targetTimestamp, strategy = 'ADAPTIVE') =>
+    api.post('/time-travel/database', {
+      table_name: '__ALL__',
+      target_timestamp: targetTimestamp,
+      strategy,
+    }).then(res => res.data),
+
   // Version Timeline
   getTimeline: (tableName, recordPk) =>
     api.get(`/timeline/${tableName}/${recordPk}`).then(res => res.data),
