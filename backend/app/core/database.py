@@ -1,6 +1,11 @@
 import logging
 from typing import Optional, Any
-import oracledb
+
+try:
+    import oracledb
+except ImportError:
+    # Oracle is optional: local development and automated tests use the emulator.
+    oracledb = None
 from app.core.config import settings
 
 logger = logging.getLogger("tt_database")
@@ -13,6 +18,12 @@ class DatabaseManager:
     @classmethod
     def initialize(cls):
         """Attempts connection to Oracle Database 21c XE using python-oracledb Thin Mode."""
+        if oracledb is None:
+            cls._connection = None
+            cls._is_oracle = False
+            cls._last_error = "python-oracledb is not installed"
+            logger.info("python-oracledb is unavailable; using the local emulator.")
+            return
         try:
             logger.info(f"Connecting to Oracle Database at {settings.ORACLE_DSN} as {settings.ORACLE_USER}...")
             # oracledb thin mode does not require Oracle Instant Client

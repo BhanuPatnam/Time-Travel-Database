@@ -240,7 +240,9 @@ export default function SqlRecordTableView({
 export function SqlMultiRowTableView({
   rows = [],
   tableName = 'CUSTOMERS',
-  title = 'Table Historical Snapshot'
+  title = 'Table Historical Snapshot',
+  changeMarkers = {},
+  onSelectRow,
 }) {
   const [viewMode, setViewMode] = useState('table');
   const [copied, setCopied] = useState(false);
@@ -254,6 +256,8 @@ export function SqlMultiRowTableView({
   }
 
   const columns = Object.keys(rows[0] || {});
+  const showChangeMarkers = Object.keys(changeMarkers).length > 0;
+  const getRecordPk = (row) => String(row.customer_id ?? row.product_id ?? row.order_id ?? row.item_id ?? '');
 
   const handleCopy = () => {
     navigator.clipboard.writeText(JSON.stringify(rows, null, 2));
@@ -314,11 +318,18 @@ export function SqlMultiRowTableView({
                     {col.toUpperCase()}
                   </th>
                 ))}
+                {showChangeMarkers && <th className="py-2 px-3">Changed Since</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E2E6EC]">
-              {rows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-[#F7F8FA] transition-colors">
+              {rows.map((row, idx) => {
+                const marker = changeMarkers[getRecordPk(row)];
+                return (
+                <tr
+                  key={idx}
+                  onClick={() => onSelectRow?.(row)}
+                  className={`transition-colors ${onSelectRow ? 'cursor-pointer' : ''} ${marker ? 'bg-[#FFF9ED] hover:bg-[#FEF3D9]' : 'hover:bg-[#F7F8FA]'}`}
+                >
                   <td className="py-2 px-3 text-[10px] text-[#8C98A9] font-mono">{idx + 1}</td>
                   {columns.map((col) => {
                     const val = row[col];
@@ -329,8 +340,21 @@ export function SqlMultiRowTableView({
                       </td>
                     );
                   })}
+                  {showChangeMarkers && (
+                    <td className="py-2 px-3 whitespace-nowrap">
+                      {marker ? (
+                        <span className="inline-flex flex-col gap-0.5">
+                          <span className={`w-fit px-1.5 py-0.5 rounded border text-[9px] font-bold ${marker.operation_type === 'DELETE' ? 'bg-[#FDF2F2] text-[#B84F52] border-[#F8C8C9]' : 'bg-[#FEF7EC] text-[#A66B16] border-[#F6E0B5]'}`}>
+                            {marker.operation_type === 'DELETE' ? 'DELETED' : 'UPDATED'}
+                          </span>
+                          <span className="text-[10px] text-[#687386]">{marker.changed_columns}</span>
+                        </span>
+                      ) : <span className="text-[10px] text-[#8C98A9]">Unchanged</span>}
+                    </td>
+                  )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

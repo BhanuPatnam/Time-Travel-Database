@@ -3,7 +3,13 @@ import logging
 import time
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime, timezone
-import oracledb
+
+try:
+    import oracledb
+except ImportError:
+    # All Oracle-specific code is guarded by an active database connection;
+    # keeping this import optional allows the emulator to run dependency-free.
+    oracledb = None
 
 from app.core.config import settings
 from app.core.database import db_manager
@@ -58,6 +64,7 @@ class TimeTravelRepository:
                         )
                         tables.append({
                             "name": tbl,
+                            "table_name": tbl,
                             "row_count": row_cnt,
                             "history_count": hist_cnt,
                             "columns": [{"name": pk_col, "type": "NUMBER"}],
@@ -72,6 +79,7 @@ class TimeTravelRepository:
         tables = [
             {
                 "name": "CUSTOMERS",
+                "table_name": "CUSTOMERS",
                 "row_count": len(oracle_emulator.customers),
                 "history_count": sum(1 for c in oracle_emulator.change_log if c["table_name"] == "CUSTOMERS"),
                 "columns": [
@@ -86,6 +94,7 @@ class TimeTravelRepository:
             },
             {
                 "name": "PRODUCTS",
+                "table_name": "PRODUCTS",
                 "row_count": len(oracle_emulator.products),
                 "history_count": sum(1 for c in oracle_emulator.change_log if c["table_name"] == "PRODUCTS"),
                 "columns": [
@@ -100,6 +109,7 @@ class TimeTravelRepository:
             },
             {
                 "name": "ORDERS",
+                "table_name": "ORDERS",
                 "row_count": len(oracle_emulator.orders),
                 "history_count": sum(1 for c in oracle_emulator.change_log if c["table_name"] == "ORDERS"),
                 "columns": [

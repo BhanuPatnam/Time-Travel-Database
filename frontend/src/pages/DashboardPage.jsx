@@ -3,7 +3,7 @@ import {
   Database, History, Flag, HardDrive, Zap, CheckCircle2, 
   AlertTriangle, RefreshCw, ArrowUpRight, Plus, Edit2, Trash2, 
   Search, Eye, Clock, Sparkles, X, ShieldAlert, ArrowRight,
-  UserPlus, ShoppingBag, ShoppingCart
+  UserPlus, ShoppingBag, ShoppingCart, Users
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip 
@@ -211,7 +211,21 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
     }
   };
 
-  const totalCurrentRows = tables.reduce((acc, t) => acc + (t.row_count || 0), 0);
+  // Helper to reliably retrieve row count for any table
+  const getTableCount = (tblName) => {
+    if (selectedTable === tblName && Array.isArray(records) && !recordsLoading) {
+      return records.length;
+    }
+    const found = tables.find(t => (t.name === tblName || t.table_name === tblName));
+    return found ? (found.row_count ?? 0) : 0;
+  };
+
+  const customersCount = getTableCount('CUSTOMERS');
+  const productsCount = getTableCount('PRODUCTS');
+  const ordersCount = getTableCount('ORDERS');
+  const totalCurrentRows = (tables && tables.length > 0)
+    ? tables.reduce((acc, t) => acc + (t.row_count || 0), 0)
+    : (customersCount + productsCount + ordersCount);
 
   const pieData = stats ? [
     { name: 'Current Data', value: stats.current_data_bytes || 4096, color: '#38bdf8' },
@@ -337,28 +351,123 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
         </div>
       )}
 
-      {/* 3. KPI Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-panel p-4 rounded-2xl glass-panel-hover">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-medium">Total Current Rows</span>
+      {/* 3. Entity Tables Overview Section (CUSTOMERS, PRODUCTS, ORDERS & TOTAL ROWS) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
             <Database className="w-4 h-4 text-sky-400" />
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Relational Business Tables Overview
+            </h3>
           </div>
-          <div className="mt-2 text-2xl font-bold text-white">
-            {loading ? '...' : totalCurrentRows.toLocaleString()}
-          </div>
-          <p className="mt-1 text-[11px] text-slate-400">Across CUSTOMERS, PRODUCTS, ORDERS</p>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {totalCurrentRows} total live entries
+          </span>
         </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Customers Count Card */}
+          <button
+            onClick={() => setSelectedTable('CUSTOMERS')}
+            className={`p-4 rounded-2xl border text-left transition cursor-pointer glass-panel-hover ${
+              selectedTable === 'CUSTOMERS'
+                ? 'bg-sky-950/30 border-sky-500/50 shadow-md shadow-sky-900/20'
+                : 'glass-panel border-slate-800'
+            }`}
+          >
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">CUSTOMERS</span>
+              <div className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-white font-mono">
+              {loading ? '...' : customersCount.toLocaleString()}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Active client accounts</span>
+              <span className="text-sky-400 font-medium hover:underline text-[10px]">View table &rarr;</span>
+            </div>
+          </button>
+
+          {/* Products Count Card */}
+          <button
+            onClick={() => setSelectedTable('PRODUCTS')}
+            className={`p-4 rounded-2xl border text-left transition cursor-pointer glass-panel-hover ${
+              selectedTable === 'PRODUCTS'
+                ? 'bg-indigo-950/30 border-indigo-500/50 shadow-md shadow-indigo-900/20'
+                : 'glass-panel border-slate-800'
+            }`}
+          >
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">PRODUCTS</span>
+              <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
+                <ShoppingBag className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-white font-mono">
+              {loading ? '...' : productsCount.toLocaleString()}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Catalog inventory items</span>
+              <span className="text-indigo-400 font-medium hover:underline text-[10px]">View table &rarr;</span>
+            </div>
+          </button>
+
+          {/* Orders Count Card */}
+          <button
+            onClick={() => setSelectedTable('ORDERS')}
+            className={`p-4 rounded-2xl border text-left transition cursor-pointer glass-panel-hover ${
+              selectedTable === 'ORDERS'
+                ? 'bg-purple-950/30 border-purple-500/50 shadow-md shadow-purple-900/20'
+                : 'glass-panel border-slate-800'
+            }`}
+          >
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-purple-400">ORDERS</span>
+              <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+                <ShoppingCart className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-white font-mono">
+              {loading ? '...' : ordersCount.toLocaleString()}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Customer purchase orders</span>
+              <span className="text-purple-400 font-medium hover:underline text-[10px]">View table &rarr;</span>
+            </div>
+          </button>
+
+          {/* Total Current Rows Card */}
+          <div className="glass-panel p-4 rounded-2xl glass-panel-hover border border-slate-800">
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">TOTAL ACTIVE ROWS</span>
+              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+                <Database className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-white font-mono">
+              {loading ? '...' : totalCurrentRows.toLocaleString()}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+              <span>Across all business schemas</span>
+              <span className="text-emerald-400 font-mono text-[10px]">Live OLTP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Temporal Engine & Performance Telemetry */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass-panel p-4 rounded-2xl glass-panel-hover">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium">Historical Changes</span>
             <History className="w-4 h-4 text-indigo-400" />
           </div>
-          <div className="mt-2 text-2xl font-bold text-white">
+          <div className="mt-2 text-2xl font-bold text-white font-mono">
             {loading ? '...' : (stats?.total_changes || 0).toLocaleString()}
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Immutable audit entries logged</p>
+          <p className="mt-1 text-[11px] text-slate-400">Immutable audit entries logged in TT_CHANGE_LOG</p>
         </div>
 
         <div className="glass-panel p-4 rounded-2xl glass-panel-hover">
@@ -366,10 +475,10 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
             <span className="text-xs font-medium">Materialized Checkpoints</span>
             <Flag className="w-4 h-4 text-purple-400" />
           </div>
-          <div className="mt-2 text-2xl font-bold text-white">
+          <div className="mt-2 text-2xl font-bold text-white font-mono">
             {loading ? '...' : (stats?.total_checkpoints || 0).toLocaleString()}
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">State boundaries materialized</p>
+          <p className="mt-1 text-[11px] text-slate-400">Consistent boundaries materialized</p>
         </div>
 
         <div className="glass-panel p-4 rounded-2xl glass-panel-hover">
@@ -377,7 +486,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
             <span className="text-xs font-medium">Storage Consumed</span>
             <HardDrive className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="mt-2 text-2xl font-bold text-white">
+          <div className="mt-2 text-2xl font-bold text-white font-mono">
             {loading ? '...' : `${((stats?.total_bytes || 0) / 1024).toFixed(1)} KB`}
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
@@ -416,8 +525,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
           {/* Table Pills */}
           <div className="flex items-center space-x-2 overflow-x-auto pb-1 md:pb-0">
             {['CUSTOMERS', 'PRODUCTS', 'ORDERS'].map((tbl) => {
-              const tblStat = tables.find(t => t.table_name === tbl);
-              const count = tblStat ? tblStat.row_count : (tbl === selectedTable ? records.length : 0);
+              const count = getTableCount(tbl);
               const isActive = selectedTable === tbl;
               return (
                 <button
@@ -430,8 +538,8 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                   }`}
                 >
                   <span>{tbl}</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                    isActive ? 'bg-indigo-500/30 text-indigo-200' : 'bg-slate-800 text-slate-400'
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+                    isActive ? 'bg-indigo-500/30 text-indigo-200' : 'bg-slate-800 text-slate-300'
                   }`}>
                     {count}
                   </span>

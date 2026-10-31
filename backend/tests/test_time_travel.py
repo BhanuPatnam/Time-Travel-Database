@@ -72,3 +72,18 @@ def test_reconstruction_with_and_without_checkpoint(emulator):
     assert res_log_only["checkpoint_id_used"] is None
     # Changes replayed in ADAPTIVE should be less than or equal to LOG_ONLY
     assert res_adaptive["changes_replayed"] <= res_log_only["changes_replayed"]
+
+
+def test_table_snapshot_keeps_rows_that_have_not_been_updated(emulator):
+    """Initial rows must not disappear merely because they have no later mutation."""
+    snapshot = emulator.reconstruct_table("CUSTOMERS", emulator._past_iso(5))
+
+    assert snapshot["total_active_rows"] == 5
+    assert {row["customer_id"] for row in snapshot["rows"]} == {101, 102, 103, 104, 105}
+
+
+def test_table_snapshot_marks_rows_updated_after_target_time(emulator):
+    snapshot = emulator.reconstruct_table("CUSTOMERS", emulator._past_iso(40))
+
+    assert snapshot["change_markers"]["101"]["changed_columns"] == "phone,credit_limit"
+    assert snapshot["change_markers"]["105"]["changed_columns"] == "status,credit_limit"

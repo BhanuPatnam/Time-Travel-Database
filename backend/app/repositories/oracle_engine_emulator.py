@@ -67,6 +67,17 @@ class OracleEngineEmulator:
         dt = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
         return dt.isoformat()
 
+    @staticmethod
+    def _normalize_iso(timestamp: str) -> str:
+        """Normalize browser ``Z`` timestamps before chronological comparison."""
+        try:
+            parsed = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc).isoformat()
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid ISO-8601 timestamp: {timestamp}")
+
     def _seed_data(self):
         # Customers
         c1 = {"customer_id": 101, "name": "Acme Industrial Corp", "email": "procurement@acmeind.com", "phone": "+1-555-0101", "status": "ACTIVE", "credit_limit": 75000.0, "created_at": self._past_iso(120), "updated_at": self._past_iso(30)}
@@ -118,6 +129,23 @@ class OracleEngineEmulator:
             "delta_values": None, "changed_columns": "ALL", "change_timestamp": t0, "commit_order_seq": 3
         })
 
+        # Every seeded live row needs an originating change event.  Without
+        # these entries, table-level reconstruction silently discarded rows
+        # that had never been updated after startup.
+        initial_rows = [
+            ("CUSTOMERS", "102", c2), ("CUSTOMERS", "103", c3), ("CUSTOMERS", "104", c4),
+            ("PRODUCTS", "202", p2), ("PRODUCTS", "203", p3), ("PRODUCTS", "204", p4), ("PRODUCTS", "205", p5),
+            ("ORDERS", "501", o1), ("ORDERS", "502", o2), ("ORDERS", "503", o3),
+        ]
+        for change_id, (table_name, record_pk, row) in enumerate(initial_rows, start=4):
+            self.change_log.append({
+                "change_id": change_id, "tx_id": 1, "table_name": table_name, "record_pk": record_pk,
+                "operation_type": "INSERT", "old_values": None,
+                "new_values": {key: value for key, value in row.items() if key not in {"created_at", "updated_at"}},
+                "delta_values": None, "changed_columns": "ALL", "change_timestamp": t0,
+                "commit_order_seq": change_id,
+            })
+
         # 2. Checkpoint #1 taken 60 mins ago
         t_cp1 = self._past_iso(60)
         self.checkpoints.append({
@@ -126,7 +154,7 @@ class OracleEngineEmulator:
             "table_name": "CUSTOMERS",
             "target_boundary_ts": t_cp1,
             "boundary_tx_id": 1,
-            "boundary_change_id": 3,
+            "boundary_change_id": 13,
             "strategy_used": "MANUAL",
             "status": "VALID",
             "row_count": 5,
@@ -138,6 +166,9 @@ class OracleEngineEmulator:
         # Checkpoint Data for Customers at CP1
         for cid, cust in [
             ("101", {"customer_id": 101, "name": "Acme Industrial Corp", "email": "procurement@acmeind.com", "phone": "+1-555-0101", "status": "ACTIVE", "credit_limit": 50000.0}),
+            ("102", {key: value for key, value in c2.items() if key not in {"created_at", "updated_at"}}),
+            ("103", {key: value for key, value in c3.items() if key not in {"created_at", "updated_at"}}),
+            ("104", {key: value for key, value in c4.items() if key not in {"created_at", "updated_at"}}),
             ("105", {"customer_id": 105, "name": "Cyberdyne Systems", "email": "miles@cyberdyne.net", "phone": "+1-555-0105", "status": "SUSPENDED", "credit_limit": 15000.0})
         ]:
             self.checkpoint_data.append({
@@ -152,38 +183,38 @@ class OracleEngineEmulator:
         # 3. Subsequent Workload Changes (after Checkpoint #1)
         t_upd1 = self._past_iso(30)
         self.change_log.append({
-            "change_id": 4, "tx_id": 2, "table_name": "CUSTOMERS", "record_pk": "101",
+            "change_id": 14, "tx_id": 2, "table_name": "CUSTOMERS", "record_pk": "101",
             "operation_type": "UPDATE",
             "old_values": {"customer_id": 101, "name": "Acme Industrial Corp", "email": "procurement@acmeind.com", "phone": "+1-555-0101", "status": "ACTIVE", "credit_limit": 50000.0},
             "new_values": {"customer_id": 101, "name": "Acme Industrial Corp", "email": "procurement@acmeind.com", "phone": "+1-555-0999", "status": "ACTIVE", "credit_limit": 75000.0},
             "delta_values": {"phone": {"old": "+1-555-0101", "new": "+1-555-0999"}, "credit_limit": {"old": 50000.0, "new": 75000.0}},
             "changed_columns": "phone,credit_limit",
             "change_timestamp": t_upd1,
-            "commit_order_seq": 4
+            "commit_order_seq": 14
         })
 
         t_upd2 = self._past_iso(45)
         self.change_log.append({
-            "change_id": 5, "tx_id": 3, "table_name": "PRODUCTS", "record_pk": "201",
+            "change_id": 15, "tx_id": 3, "table_name": "PRODUCTS", "record_pk": "201",
             "operation_type": "UPDATE",
             "old_values": {"product_id": 201, "sku": "SKU-SRV-01", "name": "High-Density Rack Server", "category": "Hardware", "unit_price": 4500.0, "stock_quantity": 45},
             "new_values": {"product_id": 201, "sku": "SKU-SRV-01", "name": "High-Density Rack Server", "category": "Hardware", "unit_price": 4250.0, "stock_quantity": 35},
             "delta_values": {"unit_price": {"old": 4500.0, "new": 4250.0}, "stock_quantity": {"old": 45, "new": 35}},
             "changed_columns": "unit_price,stock_quantity",
             "change_timestamp": t_upd2,
-            "commit_order_seq": 5
+            "commit_order_seq": 15
         })
 
         t_upd3 = self._past_iso(15)
         self.change_log.append({
-            "change_id": 6, "tx_id": 4, "table_name": "CUSTOMERS", "record_pk": "105",
+            "change_id": 16, "tx_id": 4, "table_name": "CUSTOMERS", "record_pk": "105",
             "operation_type": "UPDATE",
             "old_values": {"customer_id": 105, "name": "Cyberdyne Systems", "email": "miles@cyberdyne.net", "phone": "+1-555-0105", "status": "SUSPENDED", "credit_limit": 15000.0},
             "new_values": {"customer_id": 105, "name": "Cyberdyne Systems", "email": "miles@cyberdyne.net", "phone": "+1-555-0105", "status": "ACTIVE", "credit_limit": 40000.0},
             "delta_values": {"status": {"old": "SUSPENDED", "new": "ACTIVE"}, "credit_limit": {"old": 15000.0, "new": 40000.0}},
             "changed_columns": "status,credit_limit",
             "change_timestamp": t_upd3,
-            "commit_order_seq": 6
+            "commit_order_seq": 16
         })
 
         # Policy decision logs
@@ -216,6 +247,7 @@ class OracleEngineEmulator:
 
     # --- RECONSTRUCTION LOGIC ---
     def reconstruct_row(self, table_name: str, record_pk: str, target_ts: str, strategy: str = "ADAPTIVE") -> Dict[str, Any]:
+        target_ts = self._normalize_iso(target_ts)
         t_start = time.perf_counter()
         tbl = table_name.upper()
         cp_used = None
@@ -296,6 +328,7 @@ class OracleEngineEmulator:
     def reconstruct_table(self, table_name: str, target_ts: str, strategy: str = "ADAPTIVE") -> Dict[str, Any]:
         t_start = time.perf_counter()
         tbl = table_name.upper()
+        target_ts = self._normalize_iso(target_ts)
 
         # Find all distinct keys touched in this table
         all_pks = set()
@@ -313,6 +346,7 @@ class OracleEngineEmulator:
         reconstructed_rows = []
         total_changes = 0
         cp_used = None
+        change_markers = {}
 
         for pk in sorted(all_pks):
             rec = self.reconstruct_row(tbl, pk, target_ts, strategy)
@@ -321,6 +355,20 @@ class OracleEngineEmulator:
                 cp_used = rec["checkpoint_id_used"]
             if rec["row_state"] is not None:
                 reconstructed_rows.append(rec["row_state"])
+
+            changes_after_target = [
+                change for change in self.change_log
+                if change["table_name"] == tbl
+                and str(change["record_pk"]) == str(pk)
+                and change["change_timestamp"] > target_ts
+            ]
+            if changes_after_target:
+                latest_change = max(changes_after_target, key=lambda change: change["commit_order_seq"])
+                change_markers[str(pk)] = {
+                    "operation_type": latest_change["operation_type"],
+                    "changed_columns": latest_change.get("changed_columns") or "ALL",
+                    "change_timestamp": latest_change["change_timestamp"],
+                }
 
         t_end = time.perf_counter()
         exec_ms = round((t_end - t_start) * 1000 + 0.25, 3)
@@ -333,7 +381,8 @@ class OracleEngineEmulator:
             "changes_replayed": total_changes,
             "execution_time_ms": exec_ms,
             "total_active_rows": len(reconstructed_rows),
-            "rows": reconstructed_rows
+            "rows": reconstructed_rows,
+            "change_markers": change_markers,
         }
 
     # --- TIMELINE ---

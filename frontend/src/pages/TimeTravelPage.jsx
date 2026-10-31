@@ -519,6 +519,7 @@ export default function TimeTravelPage({ initialTable = 'CUSTOMERS', initialPk =
                       tableName={activeDbTab}
                       title={`Historical Relation: ${activeDbTab}`}
                       badge={`${rows.length} rows as of ${new Date(result.target_timestamp).toLocaleTimeString()}`}
+                      changeMarkers={currentTableData?.change_markers}
                       onSelectRow={(row) => {
                         const pk = row.customer_id || row.product_id || row.order_id || row.item_id || Object.values(row)[0];
                         handleOpenRestoreModal(activeDbTab, pk, row);
@@ -540,6 +541,7 @@ export default function TimeTravelPage({ initialTable = 'CUSTOMERS', initialPk =
                 tableName={result.table_name}
                 title={`Historical Snapshot: ${result.table_name}`}
                 badge={`${result.rows?.length || 0} active rows as of ${new Date(result.target_timestamp).toLocaleTimeString()}`}
+                changeMarkers={result.change_markers}
                 onSelectRow={(row) => {
                   const pk = row.customer_id || row.product_id || row.order_id || row.item_id || Object.values(row)[0];
                   handleOpenRestoreModal(result.table_name, pk, row);

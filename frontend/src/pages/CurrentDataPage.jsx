@@ -141,19 +141,28 @@ export default function CurrentDataPage({ onSelectRecord }) {
 
         {/* Table tabs */}
         <div className="flex items-center space-x-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800">
-          {['CUSTOMERS', 'PRODUCTS', 'ORDERS'].map((t) => (
-            <button
-              key={t}
-              onClick={() => { setSelectedTable(t); setSearchTerm(''); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                selectedTable === t
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+          {['CUSTOMERS', 'PRODUCTS', 'ORDERS'].map((t) => {
+            const tblObj = tables.find(tbl => tbl.name === t || tbl.table_name === t);
+            const count = tblObj ? tblObj.row_count : (selectedTable === t ? records.length : 0);
+            return (
+              <button
+                key={t}
+                onClick={() => { setSelectedTable(t); setSearchTerm(''); }}
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  selectedTable === t
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span>{t}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  selectedTable === t ? 'bg-indigo-500/40 text-white' : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

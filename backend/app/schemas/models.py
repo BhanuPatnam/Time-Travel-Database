@@ -14,6 +14,7 @@ class HealthResponse(BaseModel):
 # 2. Table & Record Schemas
 class TableInfo(BaseModel):
     name: str
+    table_name: Optional[str] = None
     row_count: int
     history_count: int
     columns: List[Dict[str, str]]
@@ -56,6 +57,7 @@ class TimeTravelTableResponse(BaseModel):
     execution_time_ms: float
     total_active_rows: int
     rows: List[Dict[str, Any]]
+    change_markers: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
 # 4. Version Timeline
 class TimelineEntry(BaseModel):
