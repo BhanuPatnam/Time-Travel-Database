@@ -239,7 +239,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2">
-            <h2 className="text-2xl font-bold text-white tracking-tight">Database Operations &amp; Time Travel Hub</h2>
+            <h2 className="text-2xl font-bold text-[#202833] tracking-tight">Database Operations &amp; Time Travel Hub</h2>
             <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-semibold uppercase tracking-wider">
               Live Engine
             </span>
@@ -381,7 +381,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                 <Users className="w-4 h-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold text-white font-mono">
+            <div className="mt-2 text-2xl font-bold text-[#202833] font-mono">
               {loading ? '...' : customersCount.toLocaleString()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
@@ -405,7 +405,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                 <ShoppingBag className="w-4 h-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold text-white font-mono">
+            <div className="mt-2 text-2xl font-bold text-[#202833] font-mono">
               {loading ? '...' : productsCount.toLocaleString()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
@@ -429,7 +429,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                 <ShoppingCart className="w-4 h-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold text-white font-mono">
+            <div className="mt-2 text-2xl font-bold text-[#202833] font-mono">
               {loading ? '...' : ordersCount.toLocaleString()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
@@ -446,7 +446,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                 <Database className="w-4 h-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold text-white font-mono">
+            <div className="mt-2 text-2xl font-bold text-[#202833] font-mono">
               {loading ? '...' : totalCurrentRows.toLocaleString()}
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
@@ -464,7 +464,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
             <span className="text-xs font-medium">Historical Changes</span>
             <History className="w-4 h-4 text-indigo-400" />
           </div>
-          <div className="mt-2 text-2xl font-bold text-white font-mono">
+          <div className="mt-2 text-2xl font-bold text-[#202833] font-mono">
             {loading ? '...' : (stats?.total_changes || 0).toLocaleString()}
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Immutable audit entries logged in TT_CHANGE_LOG</p>
@@ -475,7 +475,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
             <span className="text-xs font-medium">Materialized Checkpoints</span>
             <Flag className="w-4 h-4 text-purple-400" />
           </div>
-          <div className="mt-2 text-2xl font-bold text-white font-mono">
+          <div className="mt-2 text-2xl font-bold text-[#202833] font-mono">
             {loading ? '...' : (stats?.total_checkpoints || 0).toLocaleString()}
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Consistent boundaries materialized</p>
@@ -486,7 +486,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
             <span className="text-xs font-medium">Storage Consumed</span>
             <HardDrive className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="mt-2 text-2xl font-bold text-white font-mono">
+          <div className="mt-2 text-2xl font-bold text-[#202833] font-mono">
             {loading ? '...' : `${((stats?.total_bytes || 0) / 1024).toFixed(1)} KB`}
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
@@ -502,7 +502,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
           <div>
             <div className="flex items-center space-x-2">
               <Database className="w-4 h-4 text-indigo-400" />
-              <h3 className="text-base font-semibold text-white">Database Records &amp; Live DML Operations</h3>
+              <h3 className="text-base font-semibold text-[#202833]">Database Records &amp; Live DML Operations</h3>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Add new entries, update attributes, or delete rows. Every DML operation is automatically captured in <code className="text-indigo-300">TT_CHANGE_LOG</code>.
@@ -557,7 +557,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                 placeholder={`Search ${selectedTable}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8 pr-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-48 md:w-64"
+                className="pl-8 pr-3 py-1.5 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#4263A5] w-48 md:w-64"
               />
             </div>
             <button
@@ -641,7 +641,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                       {/* CUSTOMERS Row */}
                       {selectedTable === 'CUSTOMERS' && (
                         <>
-                          <td className="py-3 px-4 font-medium text-white">{row.name}</td>
+                          <td className="py-3 px-4 font-semibold text-[#202833]">{row.name}</td>
                           <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">{row.email}</td>
                           <td className="py-3 px-4 text-slate-400">{row.phone || '-'}</td>
                           <td className="py-3 px-4">
@@ -665,7 +665,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                       {selectedTable === 'PRODUCTS' && (
                         <>
                           <td className="py-3 px-4 font-mono text-xs text-amber-300">{row.sku}</td>
-                          <td className="py-3 px-4 font-medium text-white">{row.name}</td>
+                          <td className="py-3 px-4 font-semibold text-[#202833]">{row.name}</td>
                           <td className="py-3 px-4">
                             <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] border border-slate-700">
                               {row.category}
@@ -779,7 +779,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Storage Chart */}
         <div className="glass-panel p-5 rounded-2xl">
-          <h3 className="text-sm font-semibold text-white mb-1">Storage Allocation</h3>
+          <h3 className="text-sm font-semibold text-[#202833] mb-1">Storage Allocation</h3>
           <p className="text-xs text-slate-400 mb-3">Byte footprint across current data vs history</p>
           <div className="h-44 flex items-center justify-center">
             {loading ? (
@@ -803,7 +803,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                   </Pie>
                   <Tooltip 
                     formatter={(val) => [`${(val / 1024).toFixed(2)} KB`, 'Size']}
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px' }}
+                    contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E2E6EC', color: '#202833', borderRadius: '8px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -826,7 +826,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
         <div className="glass-panel p-5 rounded-2xl">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold text-white">Recent Checkpoints</h3>
+              <h3 className="text-sm font-semibold text-[#202833]">Recent Checkpoints</h3>
               <p className="text-xs text-slate-400">Consistent boundaries materialized</p>
             </div>
             <button
@@ -863,7 +863,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
         <div className="glass-panel p-5 rounded-2xl">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold text-white">Adaptive Decisions</h3>
+              <h3 className="text-sm font-semibold text-[#202833]">Adaptive Decisions</h3>
               <p className="text-xs text-slate-400">Workload cost evaluation history</p>
             </div>
             <button
@@ -911,14 +911,14 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
           <div className="glass-panel w-full max-w-lg rounded-2xl border border-slate-700 p-6 shadow-2xl relative">
             <button 
               onClick={() => setShowAddModal(false)}
-              className="absolute right-4 top-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              className="absolute right-4 top-4 p-1.5 rounded-lg text-slate-400 hover:text-[#202833] hover:bg-slate-200 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center space-x-2 text-indigo-400 mb-1">
               <Plus className="w-5 h-5" />
-              <h3 className="text-lg font-bold text-white">Add New Entry to {addTableTarget}</h3>
+              <h3 className="text-lg font-bold text-[#202833]">Add New Entry to {addTableTarget}</h3>
             </div>
             <p className="text-xs text-slate-400 mb-5">
               Insert a new row into the table. The Oracle trigger will automatically log an auditable <code className="text-indigo-300 font-mono">INSERT</code> event.
@@ -1155,7 +1155,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
 
             <div className="flex items-center space-x-2 text-indigo-400 mb-1">
               <Edit2 className="w-5 h-5" />
-              <h3 className="text-lg font-bold text-white">Update {selectedTable} #{getPkValue(editRecord)}</h3>
+              <h3 className="text-lg font-bold text-[#202833]">Update {selectedTable} #{getPkValue(editRecord)}</h3>
             </div>
             <p className="text-xs text-slate-400 mb-5">
               Modifying these fields will trigger the database temporal trigger to capture old vs new JSON states into <code className="text-indigo-300 font-mono">TT_CHANGE_LOG</code>.
@@ -1356,13 +1356,13 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                 <ShieldAlert className="w-6 h-6 text-rose-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Confirm Temporal Deletion</h3>
+                <h3 className="text-base font-bold text-[#202833]">Confirm Temporal Deletion</h3>
                 <p className="text-xs text-slate-400">Auditable tombstone event</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed mb-4">
-              Are you sure you want to delete <span className="font-semibold text-white">{selectedTable} #{getPkValue(deleteTarget)}</span>?
+            <p className="text-xs text-slate-600 leading-relaxed mb-4">
+              Are you sure you want to delete <span className="font-semibold text-[#202833]">{selectedTable} #{getPkValue(deleteTarget)}</span>?
             </p>
 
             <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 space-y-1 mb-5">

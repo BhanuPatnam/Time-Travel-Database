@@ -265,5 +265,21 @@ Results are persisted to `benchmarks/results/` as JSON and CSV exports.
 
 ---
 
-## 9. License & Academic Attribution
+## 9. Documentation & Syllabus Mapping
+
+Comprehensive technical guides and course topic mappings are maintained in the [`docs/`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs) directory:
+
+| Document | Purpose |
+| :--- | :--- |
+| **[`CHAPTERWISE_TOPICS_MAPPING.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/CHAPTERWISE_TOPICS_MAPPING.md)** | **Complete chapter-by-chapter mapping of course slides (Ch 1–7, 13–14, 17–19) to project source files** |
+| **[`ARCHITECTURE.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/ARCHITECTURE.md)** | Three-tier architecture, same-transaction CDC, and reconstruction flow |
+| **[`DATABASE_DESIGN.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/DATABASE_DESIGN.md)** | E-R diagrams, table schemas, check constraints, and B-Tree indexing strategy |
+| **[`BENCHMARK_METHODOLOGY.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/BENCHMARK_METHODOLOGY.md)** | Synthetic workload generation comparing Log-Only, Fixed-Interval, and Adaptive policies |
+| **[`SQL_DEMONSTRATION.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/SQL_DEMONSTRATION.md)** | Step-by-step SQL*Plus / SQL Developer guide using Oracle JSON_TABLE projections |
+| **[`TESTING.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/TESTING.md)** | Automated test execution, unit suites, and diagnostic emulator verification |
+| **[`DEPLOYMENT_GUIDE.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/DEPLOYMENT_GUIDE.md)** | Docker Compose and native production installation instructions |
+
+---
+
+## 10. License & Academic Attribution
 Developed as an advanced DBMS research implementation. Designed for high-integrity historical auditing and workload-aware database reconstruction.

@@ -133,14 +133,14 @@ export default function CurrentDataPage({ onSelectRecord }) {
       {/* Header & Table Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white">Current Data Explorer &amp; Live DML</h2>
-          <p className="text-xs text-slate-400">
+          <h2 className="text-xl font-bold text-[#202833]">Current Data Explorer &amp; Live DML</h2>
+          <p className="text-xs text-[#687386]">
             Inspect, insert, update, and delete live rows. All mutations trigger atomic historical change-capture.
           </p>
         </div>
 
         {/* Table tabs */}
-        <div className="flex items-center space-x-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800">
+        <div className="flex items-center space-x-1.5 p-1 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC]">
           {['CUSTOMERS', 'PRODUCTS', 'ORDERS'].map((t) => {
             const tblObj = tables.find(tbl => tbl.name === t || tbl.table_name === t);
             const count = tblObj ? tblObj.row_count : (selectedTable === t ? records.length : 0);
@@ -148,15 +148,15 @@ export default function CurrentDataPage({ onSelectRecord }) {
               <button
                 key={t}
                 onClick={() => { setSelectedTable(t); setSearchTerm(''); }}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-xs font-semibold transition cursor-pointer ${
                   selectedTable === t
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-[#4263A5] text-white shadow-xs'
+                    : 'text-[#687386] hover:text-[#202833]'
                 }`}
               >
                 <span>{t}</span>
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  selectedTable === t ? 'bg-indigo-500/40 text-white' : 'bg-slate-800 text-slate-400'
+                  selectedTable === t ? 'bg-white/20 text-white' : 'bg-[#F0F2F5] text-[#202833]'
                 }`}>
                   {count}
                 </span>
@@ -168,12 +168,12 @@ export default function CurrentDataPage({ onSelectRecord }) {
 
       {/* Action Notification Banner */}
       {actionFeedback && (
-        <div className="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-800/60 text-xs text-indigo-200 flex items-center justify-between">
+        <div className="p-4 rounded-lg bg-[#EDF3FC] border border-[#D0E0F6] text-xs text-[#202833] flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Sparkles className="w-5 h-5 text-indigo-400 shrink-0" />
+            <Sparkles className="w-5 h-5 text-[#4263A5] shrink-0" />
             <div>
-              <p className="font-semibold text-white">{actionFeedback.message}</p>
-              <p className="text-[11px] text-indigo-300">Auditable change log and commit sequences updated.</p>
+              <p className="font-semibold text-[#202833]">{actionFeedback.message}</p>
+              <p className="text-[11px] text-[#4263A5]">Auditable change log and commit sequences updated.</p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -181,13 +181,13 @@ export default function CurrentDataPage({ onSelectRecord }) {
               <>
                 <button
                   onClick={() => onSelectRecord && onSelectRecord('timeline', actionFeedback.table, actionFeedback.pk)}
-                  className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs transition"
+                  className="px-3 py-1 rounded-md bg-[#4263A5] hover:bg-[#3977A8] text-white font-medium text-xs transition cursor-pointer"
                 >
                   View in Timeline
                 </button>
                 <button
                   onClick={() => onSelectRecord && onSelectRecord('timetravel', actionFeedback.table, actionFeedback.pk)}
-                  className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs transition"
+                  className="px-3 py-1 rounded-md bg-[#7955A1] hover:bg-[#68478c] text-white font-medium text-xs transition cursor-pointer"
                 >
                   Time Travel
                 </button>
@@ -195,7 +195,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
             )}
             <button 
               onClick={() => setActionFeedback(null)} 
-              className="p-1 text-slate-400 hover:text-white"
+              className="p-1 text-[#687386] hover:text-[#202833] cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -206,13 +206,13 @@ export default function CurrentDataPage({ onSelectRecord }) {
       {/* Search & Actions Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <form onSubmit={handleSearch} className="flex-1 max-w-md relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          <Search className="w-4 h-4 text-[#687386] absolute left-3 top-2.5" />
           <input
             type="text"
             placeholder={`Search ${selectedTable}...`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full pl-9 pr-4 py-2 rounded-lg bg-[#FFFFFF] border border-[#E2E6EC] text-xs text-[#202833] placeholder:text-[#94A3B8] focus:outline-none focus:border-[#4263A5]"
           />
         </form>
 
@@ -220,7 +220,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
           <button
             onClick={fetchRecords}
             disabled={loading}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-[#F0F2F5] hover:bg-[#E4E8EE] text-[#202833] text-xs font-medium border border-[#E2E6EC] transition cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -228,7 +228,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
 
           <button
             onClick={handleOpenAdd}
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition"
+            className="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-[#4263A5] hover:bg-[#3977A8] text-white text-xs font-semibold shadow-xs transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add {selectedTable.slice(0, -1)}</span>
@@ -237,10 +237,10 @@ export default function CurrentDataPage({ onSelectRecord }) {
       </div>
 
       {/* Records Table */}
-      <div className="glass-panel rounded-2xl overflow-hidden">
+      <div className="content-panel rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
+            <thead className="bg-[#F7F8FA] border-b border-[#E2E6EC] text-[#687386] font-semibold uppercase tracking-wider text-[11px]">
               <tr>
                 {records.length > 0 && Object.keys(records[0]).map((key) => (
                   <th key={key} className="px-4 py-3">{key.replace('_', ' ')}</th>
@@ -248,16 +248,16 @@ export default function CurrentDataPage({ onSelectRecord }) {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-[#E2E6EC]">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={10} className="px-4 py-10 text-center text-[#687386]">
                     Loading {selectedTable} records...
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={10} className="px-4 py-10 text-center text-[#687386]">
                     No records found matching your query.
                   </td>
                 </tr>
@@ -265,9 +265,9 @@ export default function CurrentDataPage({ onSelectRecord }) {
                 records.map((row, idx) => {
                   const pk = getPkValue(row);
                   return (
-                    <tr key={idx} className="hover:bg-slate-800/30 transition">
+                    <tr key={idx} className="hover:bg-[#F0F2F5] transition-colors">
                       {Object.entries(row).map(([k, val]) => (
-                        <td key={k} className="px-4 py-3 text-slate-300 font-mono text-[11px]">
+                        <td key={k} className="px-4 py-3 text-[#202833] font-mono text-[11px]">
                           {val !== null && typeof val === 'object' ? JSON.stringify(val) : String(val)}
                         </td>
                       ))}
@@ -276,7 +276,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
                           {/* Inspect */}
                           <button
                             onClick={() => setActiveRecord(row)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                            className="p-1.5 rounded-md bg-[#F0F2F5] hover:bg-[#E4E8EE] text-[#202833] transition cursor-pointer"
                             title="Inspect JSON Details"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -284,7 +284,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
                           {/* Edit / Update */}
                           <button
                             onClick={() => handleOpenEdit(row)}
-                            className="p-1.5 rounded-lg bg-sky-950/60 hover:bg-sky-900/60 text-sky-300 border border-sky-800/40 transition"
+                            className="p-1.5 rounded-md bg-[#EDF3FC] hover:bg-[#D0E0F6] text-[#4263A5] border border-[#C8DCF7] transition cursor-pointer"
                             title="Update Record (Fires UPDATE trigger)"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -292,7 +292,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
                           {/* Delete */}
                           <button
                             onClick={() => setDeleteTarget(row)}
-                            className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 transition"
+                            className="p-1.5 rounded-md bg-[#FDF3F3] hover:bg-[#F9D5D6] text-[#B84F52] border border-[#F8C8C9] transition cursor-pointer"
                             title="Delete Record (Fires DELETE trigger)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -300,7 +300,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
                           {/* Time Travel */}
                           <button
                             onClick={() => onSelectRecord && onSelectRecord('timetravel', selectedTable, pk)}
-                            className="p-1.5 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 border border-indigo-800/40 transition"
+                            className="p-1.5 rounded-md bg-[#F8F4FD] hover:bg-[#E8DCF8] text-[#7955A1] border border-[#E8DCF8] transition cursor-pointer"
                             title="Time Travel"
                           >
                             <History className="w-3.5 h-3.5" />
@@ -308,7 +308,7 @@ export default function CurrentDataPage({ onSelectRecord }) {
                           {/* Timeline */}
                           <button
                             onClick={() => onSelectRecord && onSelectRecord('timeline', selectedTable, pk)}
-                            className="p-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900/60 text-purple-300 border border-purple-800/40 transition"
+                            className="p-1.5 rounded-md bg-[#EDF6F1] hover:bg-[#C6E4D4] text-[#34765A] border border-[#BDE0CE] transition cursor-pointer"
                             title="Version Timeline"
                           >
                             <GitCommit className="w-3.5 h-3.5" />
@@ -328,12 +328,12 @@ export default function CurrentDataPage({ onSelectRecord }) {
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-panel w-full max-w-lg rounded-2xl p-6 border border-indigo-700 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <Plus className="w-4 h-4 text-indigo-400" />
+            <div className="flex items-center justify-between border-b border-[#E2E6EC] pb-3">
+              <h3 className="text-base font-bold text-[#202833] flex items-center space-x-2">
+                <Plus className="w-4 h-4 text-[#4263A5]" />
                 <span>Add Entry to {selectedTable}</span>
               </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowAddModal(false)} className="text-[#687386] hover:text-[#202833] cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -533,12 +533,12 @@ export default function CurrentDataPage({ onSelectRecord }) {
       {editRecord && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-panel w-full max-w-lg rounded-2xl p-6 border border-sky-700 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <Edit2 className="w-4 h-4 text-sky-400" />
+            <div className="flex items-center justify-between border-b border-[#E2E6EC] pb-3">
+              <h3 className="text-base font-bold text-[#202833] flex items-center space-x-2">
+                <Edit2 className="w-4 h-4 text-[#4263A5]" />
                 <span>Update {selectedTable} #{getPkValue(editRecord)}</span>
               </h3>
-              <button onClick={() => setEditRecord(null)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setEditRecord(null)} className="text-[#687386] hover:text-[#202833] cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -702,28 +702,28 @@ export default function CurrentDataPage({ onSelectRecord }) {
       {deleteTarget && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-panel w-full max-w-md rounded-2xl p-6 border border-rose-800 shadow-2xl space-y-4">
-            <div className="flex items-center space-x-3 text-rose-400">
+            <div className="flex items-center space-x-3 text-[#B84F52]">
               <Trash2 className="w-5 h-5" />
-              <h3 className="text-base font-bold text-white">Delete {selectedTable} Entry</h3>
+              <h3 className="text-base font-bold text-[#202833]">Delete {selectedTable} Entry</h3>
             </div>
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs text-[#202833] leading-relaxed">
               Are you sure you want to delete <strong>{selectedTable} #{getPkValue(deleteTarget)}</strong>?
             </p>
-            <p className="text-xs text-slate-400 bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <p className="text-xs text-[#687386] bg-[#F7F8FA] p-3 rounded-lg border border-[#E2E6EC]">
               The trigger will automatically record a <strong>DELETE</strong> change event into the historical audit log. You can reconstruct or restore this row anytime using the Time Travel Explorer!
             </p>
             <div className="flex justify-end space-x-2 pt-2">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs"
+                className="px-4 py-2 rounded-lg bg-[#F0F2F5] text-[#202833] hover:bg-[#E4E8EE] text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleDeleteSubmit}
-                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-md"
+                className="px-5 py-2 rounded-lg bg-[#B84F52] hover:bg-[#a64346] text-white text-xs font-bold shadow-xs cursor-pointer"
               >
                 Yes, Delete Record
               </button>
@@ -735,10 +735,10 @@ export default function CurrentDataPage({ onSelectRecord }) {
       {/* --- RECORD INSPECT MODAL --- */}
       {activeRecord && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-lg rounded-2xl p-6 border border-slate-700 shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-2">Record Inspection</h3>
-            <p className="text-xs text-slate-400 mb-4">Table: {selectedTable}</p>
-            <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-indigo-300 overflow-x-auto max-h-80">
+          <div className="glass-panel w-full max-w-lg rounded-2xl p-6 border border-[#E2E6EC] shadow-2xl">
+            <h3 className="text-base font-bold text-[#202833] mb-2">Record Inspection</h3>
+            <p className="text-xs text-[#687386] mb-4">Table: {selectedTable}</p>
+            <pre className="p-4 rounded-lg bg-[#F3F5F7] border border-[#E2E6EC] font-mono text-xs text-[#202833] overflow-x-auto max-h-80">
               {JSON.stringify(activeRecord, null, 2)}
             </pre>
             <div className="mt-5 flex justify-end">

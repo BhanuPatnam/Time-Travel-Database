@@ -58,46 +58,127 @@
 .bg-slate-900 { background-color: #FFFFFF !important; }
 .bg-slate-900\/80, .bg-slate-900\/90, .bg-slate-900\/60, .bg-slate-900\/50, .bg-slate-900\/40 { background-color: #F7F8FA !important; }
 .bg-slate-800 { background-color: #F0F2F5 !important; }
-.bg-slate-800\/60, .bg-slate-800\/50, .bg-slate-800\/40, .bg-slate-800\/30 { background-color: #F7F8FA !important; }
+.bg-slate-800\/80, .bg-slate-800\/60, .bg-slate-800\/50, .bg-slate-800\/40, .bg-slate-800\/30 { background-color: #F7F8FA !important; }
 
 /* Borders */
 .border-slate-800, .border-slate-700, .border-slate-600 { border-color: #E2E6EC !important; }
-.border-slate-800\/60, .border-slate-800\/50, .border-slate-800\/40 { border-color: #E2E6EC !important; }
+.border-slate-800\/80, .border-slate-800\/60, .border-slate-800\/50, .border-slate-800\/40 { border-color: #E2E6EC !important; }
+.divide-slate-800, .divide-slate-800\/60, .divide-slate-700 { border-color: #E2E6EC !important; }
 
-/* Text colors */
-.text-slate-200, .text-slate-300 { color: #202833 !important; }
-.text-slate-400, .text-slate-500 { color: #687386 !important; }
+/* Form Inputs, Selects, Textareas - Ensure dark text on white input fields */
+input, select, textarea {
+  background-color: #FFFFFF !important;
+  color: #202833 !important;
+  border-color: #E2E6EC !important;
+}
+input::placeholder, textarea::placeholder {
+  color: #94A3B8 !important;
+}
+select option {
+  background-color: #FFFFFF !important;
+  color: #202833 !important;
+}
 
-/* Headers and titles */
-h1.text-white, h2.text-white, h3.text-white, h4.text-white, p.text-white, span.text-white, strong.text-white {
+/* Tables */
+table {
+  color: #202833;
+}
+thead th {
+  color: #687386 !important;
+  background-color: #F7F8FA !important;
+  border-bottom: 1px solid #E2E6EC !important;
+}
+tbody td {
+  color: #202833 !important;
+  border-color: #E2E6EC !important;
+}
+tbody tr:hover {
+  background-color: #F0F2F5 !important;
+}
+
+/* Text color contrast overrides */
+.text-slate-50, .text-slate-100, .text-slate-200, .text-slate-300 { 
+  color: #202833 !important; 
+}
+.text-slate-400, .text-slate-500 { 
+  color: #687386 !important; 
+}
+
+/* Default .text-white on light backgrounds turns into high-contrast dark text */
+.text-white {
   color: #202833 !important;
 }
 
 /* Modal backdrop */
-.bg-black\/70, .bg-black\/60, .bg-black\/50 {
+.bg-black\/75, .bg-black\/70, .bg-black\/60, .bg-black\/50 {
   background-color: rgba(32, 40, 51, 0.45) !important;
 }
 
-/* Primary actions keep their crisp white text and brand colors */
+/* Light Status Badges */
+.bg-emerald-950\/60, .bg-emerald-950\/40, .bg-emerald-900\/60 {
+  background-color: #EDF6F1 !important;
+  color: #34765A !important;
+  border-color: #C6E4D4 !important;
+}
+.bg-indigo-950\/60, .bg-indigo-950\/40, .bg-indigo-900\/60 {
+  background-color: #EDF3FC !important;
+  color: #4263A5 !important;
+  border-color: #D0E0F6 !important;
+}
+.bg-purple-950\/60, .bg-purple-950\/40, .bg-purple-900\/60 {
+  background-color: #F8F4FD !important;
+  color: #7955A1 !important;
+  border-color: #E8DCF8 !important;
+}
+.bg-rose-950\/60, .bg-rose-950\/40, .bg-rose-900\/60 {
+  background-color: #FDF3F3 !important;
+  color: #B84F52 !important;
+  border-color: #F9D5D6 !important;
+}
+.bg-amber-950\/60, .bg-amber-950\/40, .bg-amber-900\/60 {
+  background-color: #FEF7EC !important;
+  color: #A66B16 !important;
+  border-color: #F6E0B5 !important;
+}
+.bg-sky-950\/60, .bg-sky-950\/40, .bg-sky-900\/60 {
+  background-color: #EDF3FC !important;
+  color: #2B6CB0 !important;
+  border-color: #CBDDF6 !important;
+}
+
+/* Solid Brand Action Buttons keep crisp white text on their colored backgrounds */
+.bg-indigo-600, .bg-indigo-600 *,
+.bg-indigo-700, .bg-indigo-700 *,
+.bg-purple-600, .bg-purple-600 *,
+.bg-purple-700, .bg-purple-700 *,
+.bg-rose-600, .bg-rose-600 *,
+.bg-rose-700, .bg-rose-700 *,
+.bg-emerald-600, .bg-emerald-600 *,
+.bg-emerald-700, .bg-emerald-700 *,
+.bg-sky-600, .bg-sky-600 *,
+.bg-sky-700, .bg-sky-700 *,
+.bg-\[\#4263A5\], .bg-\[\#4263A5\] *,
+.bg-\[\#7955A1\], .bg-\[\#7955A1\] *,
+.bg-\[\#34765A\], .bg-\[\#34765A\] *,
+.bg-\[\#B84F52\], .bg-\[\#B84F52\] * {
+  color: #FFFFFF !important;
+}
+
 button.bg-indigo-600, .bg-indigo-600 {
   background-color: #4263A5 !important;
-  color: #FFFFFF !important;
 }
 button.bg-indigo-600:hover, .bg-indigo-600:hover {
   background-color: #3977A8 !important;
 }
 button.bg-purple-600, .bg-purple-600 {
   background-color: #7955A1 !important;
-  color: #FFFFFF !important;
 }
 button.bg-rose-600, .bg-rose-600 {
   background-color: #B84F52 !important;
-  color: #FFFFFF !important;
 }
 button.bg-emerald-600, .bg-emerald-600 {
   background-color: #34765A !important;
-  color: #FFFFFF !important;
 }
-button.text-white, a.text-white {
-  color: #FFFFFF !important;
+button.bg-sky-600, .bg-sky-600 {
+  background-color: #2B6CB0 !important;
 }
