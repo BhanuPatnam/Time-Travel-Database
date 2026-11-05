@@ -10,6 +10,7 @@ import CheckpointManagerPage from './pages/CheckpointManagerPage';
 import BenchmarkCenterPage from './pages/BenchmarkCenterPage';
 import RestorationCenterPage from './pages/RestorationCenterPage';
 import SettingsPage from './pages/SettingsPage';
+import BranchingPage from './pages/BranchingPage';
 import apiService from './services/api';
 
 export default function App() {
@@ -53,6 +54,7 @@ export default function App() {
             <TimelinePage initialTable={navContext.table} initialPk={navContext.pk} />
           )}
           {activeTab === 'diff' && <DiffViewerPage />}
+          {activeTab === 'branching' && <BranchingPage />}
           {activeTab === 'checkpoints' && <CheckpointManagerPage />}
           {activeTab === 'benchmarks' && <BenchmarkCenterPage />}
           {activeTab === 'restoration' && <RestorationCenterPage />}

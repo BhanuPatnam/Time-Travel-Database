@@ -15,6 +15,11 @@ erDiagram
     TT_TRANSACTIONS ||--o{ TT_CHANGE_LOG : contains
     TT_CHECKPOINTS ||--o{ TT_CHECKPOINT_DATA : stores
 
+    TT_BRANCHES ||--o{ TT_BRANCH_COMMITS : contains
+    TT_BRANCH_COMMITS ||--o{ TT_BRANCH_CHANGESET : contains
+    TT_BRANCHES ||--o{ TT_BRANCH_MERGE_HISTORY : source_of
+    TT_BRANCHES ||--o{ TT_BRANCH_MERGE_HISTORY : target_of
+
     CUSTOMERS {
         NUMBER customer_id PK
         VARCHAR2 name
@@ -102,6 +107,49 @@ erDiagram
         VARCHAR2 record_pk
         CLOB row_data
     }
+
+    TT_BRANCHES {
+        NUMBER branch_id PK
+        VARCHAR2 branch_name UK
+        NUMBER parent_branch_id FK
+        VARCHAR2 base_commit_id
+        TIMESTAMP base_timestamp
+        VARCHAR2 branch_status
+        NUMBER is_default
+    }
+
+    TT_BRANCH_COMMITS {
+        VARCHAR2 commit_id PK
+        NUMBER branch_id FK
+        VARCHAR2 parent_commit_id FK
+        VARCHAR2 commit_message
+        TIMESTAMP commit_timestamp
+        NUMBER commit_order_seq
+        VARCHAR2 commit_type
+        VARCHAR2 merge_parent_commit_id
+    }
+
+    TT_BRANCH_CHANGESET {
+        NUMBER changeset_id PK
+        VARCHAR2 commit_id FK
+        VARCHAR2 table_name
+        VARCHAR2 record_id
+        VARCHAR2 operation_type
+        CLOB before_values
+        CLOB after_values
+        CLOB delta_values
+    }
+
+    TT_BRANCH_MERGE_HISTORY {
+        NUMBER merge_id PK
+        NUMBER source_branch_id FK
+        NUMBER target_branch_id FK
+        VARCHAR2 source_commit_id
+        VARCHAR2 target_commit_id
+        VARCHAR2 merge_commit_id
+        VARCHAR2 merge_status
+        NUMBER conflicts_count
+    }
 ```
 
 ---
@@ -162,6 +210,44 @@ erDiagram
 
 ---
 
+### 2.3. Temporal Branching & Merge Tables
+1. **`TT_BRANCHES`**:
+   - `branch_id` (NUMBER, PK): Primary key from `TT_BRANCH_SEQ`.
+   - `branch_name` (VARCHAR2(100), UNIQUE, NOT NULL): Human-readable branch tag (e.g., `feature/pricing-v2`).
+   - `parent_branch_id` (NUMBER, FK): References parent branch in `TT_BRANCHES(branch_id)`.
+   - `base_commit_id` (VARCHAR2(64)): Ancestor commit point at branch creation.
+   - `base_timestamp` (TIMESTAMP WITH TIME ZONE, NOT NULL): State baseline timestamp.
+   - `branch_status` (VARCHAR2(20), CHECK `IN ('ACTIVE', 'MERGED', 'DELETED')`).
+   - `is_default` (NUMBER(1), CHECK `IN (0, 1)`): Flag indicating default branch (`main` = 1).
+
+2. **`TT_BRANCH_COMMITS`**:
+   - `commit_id` (VARCHAR2(64), PK): Unique commit identifier (e.g., `c101`).
+   - `branch_id` (NUMBER, FK): Links to `TT_BRANCHES(branch_id)` ON DELETE CASCADE.
+   - `parent_commit_id` (VARCHAR2(64), FK): Direct predecessor commit in branch history.
+   - `commit_message` (VARCHAR2(500), NOT NULL): Description of the modification.
+   - `commit_timestamp` (TIMESTAMP WITH TIME ZONE, NOT NULL): Commit creation time.
+   - `commit_order_seq` (NUMBER, NOT NULL): Monotonic sequence number for serializability.
+   - `commit_type` (VARCHAR2(20), CHECK `IN ('INITIAL', 'NORMAL', 'MERGE', 'FAST_FORWARD')`).
+   - `merge_parent_commit_id` (VARCHAR2(64), FK): Second parent commit recorded on merges.
+
+3. **`TT_BRANCH_CHANGESET`**:
+   - `changeset_id` (NUMBER, PK): Primary key from `TT_CHANGESET_SEQ`.
+   - `commit_id` (VARCHAR2(64), FK): Links to `TT_BRANCH_COMMITS(commit_id)` ON DELETE CASCADE.
+   - `table_name` (VARCHAR2(60), NOT NULL): Entity altered.
+   - `record_id` (VARCHAR2(255), NOT NULL): Entity primary key.
+   - `operation_type` (VARCHAR2(10), CHECK `IN ('INSERT', 'UPDATE', 'DELETE')`).
+   - `before_values`, `after_values`, `delta_values` (CLOB, CHECK `IS JSON`).
+
+4. **`TT_BRANCH_MERGE_HISTORY`**:
+   - `merge_id` (NUMBER, PK): Primary key from `TT_MERGE_SEQ`.
+   - `source_branch_id` (NUMBER, FK), `target_branch_id` (NUMBER, FK).
+   - `source_commit_id`, `target_commit_id`, `merge_commit_id`.
+   - `merge_status` (VARCHAR2(20), CHECK `IN ('SUCCESS', 'CONFLICT', 'ABORTED', 'FAST_FORWARD')`).
+   - `conflicts_count` (NUMBER): Count of unresolved or detected record conflicts.
+   - `conflict_details` (CLOB, CHECK `IS JSON`): Full diagnostic 3-way conflict payload.
+
+---
+
 ## 3. Indexing Strategy for Reconstruction Performance
 
 | Index Name | Table | Indexed Columns | Purpose |
@@ -172,3 +258,8 @@ erDiagram
 | `IDX_TT_CP_LOOKUP` | `TT_CHECKPOINTS` | `(table_name, boundary_timestamp, status)` | Fast discovery of nearest preceding checkpoint |
 | `IDX_TT_CP_DATA` | `TT_CHECKPOINT_DATA` | `(checkpoint_id, table_name, record_pk)` | Instant retrieval of baseline row at checkpoint |
 | `IDX_TT_QMETRICS_TBL_TIME` | `TT_QUERY_METRICS`| `(table_name, queried_at)` | Dynamic query frequency window computation |
+| `IDX_TT_COMMITS_BRANCH` | `TT_BRANCH_COMMITS` | `(branch_id, commit_order_seq)` | Fast topological commit history queries |
+| `IDX_TT_COMMITS_PARENT` | `TT_BRANCH_COMMITS` | `(parent_commit_id)` | Lineage and merge base traversal |
+| `IDX_TT_CHANGESET_COMMIT` | `TT_BRANCH_CHANGESET`| `(commit_id)` | Quick retrieval of changes for a commit |
+| `IDX_TT_CHANGESET_LOOKUP` | `TT_BRANCH_CHANGESET`| `(table_name, record_id)` | Entity mutation search in branch workspace |
+| `IDX_TT_MERGE_STATUS` | `TT_BRANCH_MERGE_HISTORY`| `(merge_status, merge_timestamp)` | Fast lookup of pending / active merges |

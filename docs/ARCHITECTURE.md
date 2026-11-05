@@ -117,3 +117,63 @@ Unlike native `FLASHBACK TABLE`, which erases history between the point of failu
 2. It generates a preview validating that foreign keys (e.g., customer of an order) currently exist.
 3. Upon user confirmation, it applies an `UPDATE` or `INSERT` in the present as a **new, auditable transaction**.
 4. The history trail remains 100% unbroken and fully traceable.
+
+---
+
+## 6. Temporal Branching & Three-Way Merge Engine
+
+### 6.1. Concept & Workspace Isolation
+The temporal branching engine enables isolated database sandboxes without copying entire physical tables.
+- **Copy-On-Write Changeset Model:** The base database tables remain 100% immutable while experimenting on branches.
+- **Branch Lineage:** A branch records its origin base (commit ID and/or historical timestamp) and tracks modifications exclusively as delta changesets in `TT_BRANCH_CHANGESET`.
+
+### 6.2. Commit Graph & Ancestry
+Every branch commit has:
+- A unique `commit_id` (e.g., `c101`, `c102`)
+- A primary parent (`parent_commit_id`)
+- An optional merge parent (`merge_parent_commit_id`)
+- A monotonic order sequence (`commit_order_seq`)
+- Auditable metadata: author, timestamp, commit type (`INITIAL`, `NORMAL`, `MERGE`, `FAST_FORWARD`)
+
+### 6.3. Three-Way Merge Engine Workflow
+
+```
+            [ Common Ancestor: Merge Base (S_base) ]
+                           /            \
+                          /              \
+  [ Source Head (S_src) ]                  [ Target Head (S_tgt) ]
+        \                                            /
+         \                                          /
+          └───► [ 1. Three-Way Record & Column Diff ]
+                             │
+            ┌────────────────┴────────────────┐
+     [ Clean Merges ]                  [ Merge Conflicts ]
+     • Disjoint Column Changes         • Same Column Different Values
+     • Fast-Forward Advances           • Delete vs Update
+     • Non-overlapping Inserts         • Concurrent Insert of Same PK
+            │                                 │
+            │                         [ Manual Resolver ]
+            │                         • Accept Source
+            │                         • Accept Target
+            │                         • Custom Edited Values
+            │                                 │
+            └────────────────┬────────────────┘
+                             │
+            [ Validate Constraints & Foreign Keys ]
+                             │
+            [ Create Merge Commit with 2 Parents ]
+            [ Log Entry in TT_BRANCH_MERGE_HISTORY ]
+```
+
+### 6.4. Conflict Detection Matrix
+
+| Condition | Resolution | Action |
+| :--- | :--- | :--- |
+| Unchanged in Source & Target | No change | Keep Target value |
+| Changed in Source, Unchanged in Target | Clean merge | Apply Source change |
+| Unchanged in Source, Changed in Target | Clean merge | Retain Target change |
+| Both Changed, Disjoint Columns | Column auto-merge | Merge column sets cleanly |
+| Both Changed, Same Column Differently | **Conflict** | Flag `SAME_COLUMN_MODIFICATION` |
+| One Deleted, One Updated | **Conflict** | Flag `DELETE_VS_UPDATE` |
+| Both Inserted Same PK (Differing Values) | **Conflict** | Flag `CONCURRENT_INSERT` |
+

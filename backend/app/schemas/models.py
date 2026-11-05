@@ -202,3 +202,93 @@ class StorageStatsResponse(BaseModel):
 class ConfigUpdate(BaseModel):
     param_key: str
     param_value: str
+
+# 10. Temporal Branching & Merge System
+class BranchCreateRequest(BaseModel):
+    branch_name: str
+    parent_branch_name: Optional[str] = "main"
+    base_timestamp: Optional[str] = None
+    base_commit_id: Optional[str] = None
+    description: Optional[str] = None
+    created_by: Optional[str] = "developer"
+
+class BranchInfo(BaseModel):
+    branch_id: int
+    branch_name: str
+    parent_branch_id: Optional[int] = None
+    parent_name: Optional[str] = None
+    base_commit_id: Optional[str] = None
+    base_timestamp: str
+    created_at: str
+    created_by: str
+    branch_status: str
+    is_default: str
+    description: Optional[str] = None
+    commit_count: int = 0
+    head_commit_id: Optional[str] = None
+    head_commit_message: Optional[str] = None
+
+class BranchCommitCreateRequest(BaseModel):
+    commit_message: str
+    author: Optional[str] = "developer"
+    changes: List[Dict[str, Any]] = Field(default_factory=list)
+    parent_commit_id: Optional[str] = None
+    commit_type: Optional[str] = "NORMAL"
+    merge_parent_commit_id: Optional[str] = None
+
+class BranchCommitInfo(BaseModel):
+    commit_id: str
+    branch_id: int
+    parent_commit_id: Optional[str] = None
+    commit_message: str
+    commit_timestamp: str
+    commit_order_seq: int
+    author: str
+    commit_type: str
+    merge_parent_commit_id: Optional[str] = None
+    changeset_count: int = 0
+    changes: Optional[List[Dict[str, Any]]] = None
+
+class BranchCompareRequest(BaseModel):
+    base_branch: str = "main"
+    compare_branch: str
+
+class BranchCompareResponse(BaseModel):
+    base_branch: str
+    compare_branch: str
+    merge_base_commit: Optional[str] = None
+    total_changes: int
+    added_count: int
+    modified_count: int
+    deleted_count: int
+    changes: List[Dict[str, Any]]
+
+class BranchMergeRequest(BaseModel):
+    source_branch: str
+    target_branch: str = "main"
+    merge_message: Optional[str] = None
+    author: Optional[str] = "developer"
+    resolution_strategy: Optional[str] = "AUTO"
+    resolved_conflicts: Optional[List[Dict[str, Any]]] = None
+
+class BranchMergeResponse(BaseModel):
+    status: str  # SUCCESS, CONFLICT, FAST_FORWARD, ABORTED
+    merge_type: Optional[str] = None
+    merge_id: int
+    merge_commit_id: Optional[str] = None
+    conflicts_count: int = 0
+    conflicts: Optional[List[Dict[str, Any]]] = None
+    message: str
+
+class MergeResolveRequest(BaseModel):
+    resolutions: List[Dict[str, Any]]
+    author: Optional[str] = "developer"
+
+class BranchStateResponse(BaseModel):
+    branch_id: int
+    branch_name: Optional[str] = None
+    commit_id: Optional[str] = None
+    table_name: str
+    total_records: int
+    records: List[Dict[str, Any]]
+

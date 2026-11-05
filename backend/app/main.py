@@ -7,7 +7,8 @@ from app.core.config import settings
 from app.core.database import db_manager
 from app.api import (
     health, tables, time_travel, timeline,
-    diff, checkpoints, restore, benchmarks, settings as app_settings
+    diff, checkpoints, restore, benchmarks, settings as app_settings,
+    branches
 )
 
 logging.basicConfig(
@@ -52,6 +53,7 @@ app.include_router(checkpoints.router, prefix=settings.API_PREFIX)
 app.include_router(restore.router, prefix=settings.API_PREFIX)
 app.include_router(benchmarks.router, prefix=settings.API_PREFIX)
 app.include_router(app_settings.router, prefix=settings.API_PREFIX)
+app.include_router(branches.router, prefix=settings.API_PREFIX)
 
 @app.get("/")
 def root():

@@ -102,6 +102,22 @@ export const apiService = {
   updateSetting: (paramKey, paramValue) =>
     api.post('/settings', { param_key: paramKey, param_value: paramValue }).then(res => res.data),
   getStorageStats: () => api.get('/storage/stats').then(res => res.data),
+
+  // Temporal Branching & Merge Engine
+  getBranches: () => api.get('/branches').then(res => res.data),
+  getBranch: (branchId) => api.get(`/branches/${branchId}`).then(res => res.data),
+  createBranch: (data) => api.post('/branches', data).then(res => res.data),
+  deleteBranch: (branchId) => api.delete(`/branches/${branchId}`).then(res => res.data),
+  createBranchCommit: (branchId, data) => api.post(`/branches/${branchId}/commits`, data).then(res => res.data),
+  getBranchCommits: (branchId) => api.get(`/branches/${branchId}/commits`).then(res => res.data),
+  getBranchState: (branchId, tableName = '__ALL__', commitId = null) =>
+    api.get(`/branches/${branchId}/state`, { params: { table_name: tableName, commit_id: commitId } }).then(res => res.data),
+  getBranchTimeline: (branchId) => api.get(`/branches/${branchId}/timeline`).then(res => res.data),
+  compareBranches: (baseBranch, compareBranch) =>
+    api.post('/branches/compare', { base_branch: baseBranch, compare_branch: compareBranch }).then(res => res.data),
+  mergeBranches: (data) => api.post('/branches/merge', data).then(res => res.data),
+  resolveMergeConflict: (mergeId, data) => api.post(`/branches/merge/${mergeId}/resolve`, data).then(res => res.data),
+  abortMerge: (mergeId) => api.post(`/branches/merge/${mergeId}/abort`).then(res => res.data),
 };
 
 export default apiService;

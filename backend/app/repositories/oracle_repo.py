@@ -589,4 +589,229 @@ class TimeTravelRepository:
     def update_config(self, key: str, value: str):
         oracle_emulator.config[key.upper()] = str(value)
 
+    # --- TEMPORAL BRANCHING & MERGE ENGINE ---
+
+    def create_branch(
+        self,
+        branch_name: str,
+        parent_branch_name: str = "main",
+        base_timestamp: Optional[str] = None,
+        base_commit_id: Optional[str] = None,
+        created_by: str = "developer",
+        description: Optional[str] = None
+    ) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    iso_str = _format_iso_ts(base_timestamp) if base_timestamp else None
+                    cur.execute("""
+                        SELECT TT_BRANCH_PKG.create_branch(
+                            :1, :2, 
+                            (CASE WHEN :3 IS NOT NULL THEN TO_TIMESTAMP_TZ(:3, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM') ELSE NULL END),
+                            :4, :5, :6
+                        ) FROM DUAL
+                    """, [branch_name, parent_branch_name, iso_str, base_commit_id, created_by, description])
+                return self.get_branch(branch_name)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.create_branch failed: {e}")
+                raise ValueError(f"Failed to create branch: {str(e)}")
+
+        return oracle_emulator.create_branch(branch_name, parent_branch_name, base_timestamp, base_commit_id, created_by, description)
+
+    def list_branches(self) -> List[Dict[str, Any]]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.list_branches() FROM DUAL")
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.list_branches failed: {e}")
+                raise ValueError(f"Failed to list branches: {str(e)}")
+
+        return oracle_emulator.list_branches()
+
+    def get_branch(self, branch_id_or_name: Union[int, str]) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.get_branch(:1) FROM DUAL", [str(branch_id_or_name)])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.get_branch failed: {e}")
+                raise ValueError(f"Failed to get branch: {str(e)}")
+
+        return oracle_emulator.get_branch(branch_id_or_name)
+
+    def delete_branch(self, branch_id_or_name: Union[int, str]) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.delete_branch(:1) FROM DUAL", [str(branch_id_or_name)])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.delete_branch failed: {e}")
+                raise ValueError(f"Failed to delete branch: {str(e)}")
+
+        return oracle_emulator.delete_branch(branch_id_or_name)
+
+    def create_branch_commit(
+        self,
+        branch_id_or_name: Union[int, str],
+        commit_message: str,
+        author: str = "developer",
+        changes: Optional[List[Dict[str, Any]]] = None,
+        parent_commit_id: Optional[str] = None,
+        commit_type: str = "NORMAL",
+        merge_parent_commit_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                changes_json = json.dumps(changes or [])
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT TT_BRANCH_PKG.create_branch_commit(
+                            :1, :2, :3, :4, :5, :6, :7
+                        ) FROM DUAL
+                    """, [str(branch_id_or_name), commit_message, author, changes_json, parent_commit_id, commit_type, merge_parent_commit_id])
+                    cid = cur.fetchone()[0]
+                return {"commit_id": cid, "message": commit_message, "author": author}
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.create_branch_commit failed: {e}")
+                raise ValueError(f"Failed to create commit: {str(e)}")
+
+        return oracle_emulator.create_branch_commit(branch_id_or_name, commit_message, author, changes, parent_commit_id, commit_type, merge_parent_commit_id)
+
+    def get_branch_commits(self, branch_id_or_name: Union[int, str]) -> List[Dict[str, Any]]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.get_branch_history(:1) FROM DUAL", [str(branch_id_or_name)])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.get_branch_history failed: {e}")
+                raise ValueError(f"Failed to get branch history: {str(e)}")
+
+        return oracle_emulator.get_branch_commits(branch_id_or_name)
+
+    def get_branch_state(
+        self,
+        branch_id_or_name: Union[int, str],
+        table_name: str = "__ALL__",
+        commit_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.get_branch_state(:1, :2, :3) FROM DUAL", [str(branch_id_or_name), table_name, commit_id])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.get_branch_state failed: {e}")
+                raise ValueError(f"Failed to get branch state: {str(e)}")
+
+        return oracle_emulator.get_branch_state(branch_id_or_name, table_name, commit_id)
+
+    def compare_branches(
+        self,
+        base_branch: Union[int, str],
+        compare_branch: Union[int, str]
+    ) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.compare_branches(:1, :2) FROM DUAL", [str(base_branch), str(compare_branch)])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.compare_branches failed: {e}")
+                raise ValueError(f"Failed to compare branches: {str(e)}")
+
+        return oracle_emulator.compare_branches(base_branch, compare_branch)
+
+    def merge_branches(
+        self,
+        source_branch: Union[int, str],
+        target_branch: Union[int, str] = "main",
+        merge_message: Optional[str] = None,
+        author: str = "developer",
+        resolution_strategy: str = "AUTO",
+        resolved_conflicts: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                resolved_json = json.dumps(resolved_conflicts) if resolved_conflicts else None
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT TT_BRANCH_PKG.merge_branches(
+                            :1, :2, :3, :4, :5, :6
+                        ) FROM DUAL
+                    """, [str(source_branch), str(target_branch), merge_message, author, resolution_strategy, resolved_json])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.merge_branches failed: {e}")
+                raise ValueError(f"Failed to merge branches: {str(e)}")
+
+        return oracle_emulator.merge_branches(source_branch, target_branch, merge_message, author, resolution_strategy, resolved_conflicts)
+
+    def resolve_merge_conflict(
+        self,
+        merge_id: int,
+        resolutions: List[Dict[str, Any]],
+        author: str = "developer"
+    ) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                res_json = json.dumps(resolutions)
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.resolve_merge_conflict(:1, :2, :3) FROM DUAL", [merge_id, res_json, author])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.resolve_merge_conflict failed: {e}")
+                raise ValueError(f"Failed to resolve merge conflict: {str(e)}")
+
+        return oracle_emulator.resolve_merge_conflict(merge_id, resolutions, author)
+
+    def abort_merge(self, merge_id: int) -> Dict[str, Any]:
+        conn = db_manager.get_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT TT_BRANCH_PKG.abort_merge(:1) FROM DUAL", [merge_id])
+                    res = cur.fetchone()[0]
+                    content = res.read() if hasattr(res, 'read') else res
+                    return json.loads(content)
+            except Exception as e:
+                logger.error(f"Oracle TT_BRANCH_PKG.abort_merge failed: {e}")
+                raise ValueError(f"Failed to abort merge: {str(e)}")
+
+        return oracle_emulator.abort_merge(merge_id)
+
+    def get_branch_timeline(self, branch_id: Optional[Union[int, str]] = None) -> Dict[str, Any]:
+        return oracle_emulator.get_branch_timeline(branch_id)
+
+
 repository = TimeTravelRepository()

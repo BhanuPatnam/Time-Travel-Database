@@ -1,6 +1,6 @@
 # Time Travel Database: A Workload-Aware Historical Data Reconstruction System Using Adaptive Checkpointing
 
-[![Tests](https://img.shields.io/badge/pytest-16%20passed-emerald)](https://github.com)
+[![Tests](https://img.shields.io/badge/pytest-34%20passed-emerald)](https://github.com)
 [![Oracle Database](https://img.shields.io/badge/Oracle-21c%20XE-red)](https://www.oracle.com/database/technologies/xe-downloads.html)
 [![Backend](https://img.shields.io/badge/FastAPI-0.110+-teal)](https://fastapi.tiangolo.com)
 [![Frontend](https://img.shields.io/badge/React-19%20%7C%20Vite-blue)](https://vitejs.dev)
@@ -105,6 +105,12 @@ flowchart TD
 - `TT_QUERY_METRICS`: Historical query telemetries feeding runtime cost data back into the adaptive policy.
 - `TT_CONFIG`: Dynamic system tuning parameters.
 
+### Temporal Branching & Merge Objects
+- `TT_BRANCHES`: Branch metadata (`branch_id`, `branch_name`, `parent_branch_id`, `base_commit_id`, `base_timestamp`, `branch_status`, `is_default`).
+- `TT_BRANCH_COMMITS`: Immutable Git-like commit ledger (`commit_id`, `branch_id`, `parent_commit_id`, `commit_message`, `commit_timestamp`, `commit_order_seq`, `author`, `commit_type`, `merge_parent_commit_id`).
+- `TT_BRANCH_CHANGESET`: Record-level modifications in each commit (`changeset_id`, `commit_id`, `table_name`, `record_id`, `operation_type`, `before_values`, `after_values`, `delta_values`).
+- `TT_BRANCH_MERGE_HISTORY`: Audit trail for three-way and fast-forward merges (`merge_id`, `source_branch_id`, `target_branch_id`, `source_commit_id`, `target_commit_id`, `merge_commit_id`, `merge_status`, `conflicts_count`, `conflict_details`).
+
 ---
 
 ## 4. Key Algorithms
@@ -167,7 +173,55 @@ FUNCTION EvaluateAdaptivePolicy(table):
 
 ---
 
-## 5. Comparison: Our Engine vs. Oracle Flashback Data Archive
+## 5. Temporal Branching & Merge Engine (GitHub-Inspired)
+
+The database includes an advanced, Git-style temporal branching and merge system implemented natively in Oracle PL/SQL ([`TT_BRANCH_PKG`](file:///Users/patnambhanuprakash/Desktop/DBMS/database/16_create_branch_pkg.sql)). Users can fork independent database workspaces from the live head, from any historical timestamp, or from existing branch commits without mutating the production baseline.
+
+```mermaid
+flowchart TD
+    subgraph Commit Graph & Lineage
+        C1["C1 (Root Baseline)"] --> C2["C2 (Main Tx)"]
+        C2 --> C3["C3 (Branch Point)"]
+        C3 --> C4["C4 (Main Continue)"]
+        
+        C3 -.->|Fork Branch| B1["C101 (feature/pricing-v2)"]
+        B1 --> B2["C102 (Update SKU-SRV-01 Price)"]
+        
+        C4 --> M1["C103 (3-Way Merge Commit)"]
+        B2 --> M1
+    end
+
+    subgraph Three-Way Merge Engine
+        MB["1. Calculate Merge Base (C3)"]
+        DIFF["2. Three-Way Diff (Base vs Source vs Target)"]
+        CONF{"3. Conflict?"}
+        AUTO["Clean Auto-Merge (Disjoint Columns / Fast-Forward)"]
+        RESOLVE["Interactive 3-Way Conflict Resolver"]
+        
+        MB --> DIFF
+        DIFF --> CONF
+        CONF -->|No| AUTO
+        CONF -->|Yes| RESOLVE
+        AUTO --> M1
+        RESOLVE --> M1
+    end
+```
+
+### Three-Way Merge Resolution Logic
+Given Common Ancestor $S_{\text{base}}$, Source Branch $S_{\text{source}}$, and Target Branch $S_{\text{target}}$:
+* **Unchanged in both:** Preserve $S_{\text{target}}$.
+* **Modified only in Source:** Safely apply Source change to Target.
+* **Modified only in Target:** Retain Target version.
+* **Modified in both:**
+  * **Disjoint Columns:** Automatically merged (e.g., Source modified `status`, Target modified `credit_limit`).
+  * **Same Column Differently:** Flagged as `SAME_COLUMN_MODIFICATION` conflict.
+  * **Delete vs Update:** Flagged as `DELETE_VS_UPDATE` conflict.
+  * **Concurrent Insert:** Flagged as `CONCURRENT_INSERT` conflict.
+* **Interactive Conflict Resolution:** Allows granular acceptance of Source, Target, or Custom values before committing the merge transaction.
+
+---
+
+## 6. Comparison: Our Engine vs. Oracle Flashback Data Archive
 
 | Feature | Our Adaptive Time Travel Engine | Oracle Flashback Data Archive (FDA) |
 | :--- | :--- | :--- |
@@ -180,7 +234,7 @@ FUNCTION EvaluateAdaptivePolicy(table):
 
 ---
 
-## 6. Quick Start
+## 7. Quick Start
 
 ### Prerequisites
 - Python 3.10+
@@ -202,7 +256,7 @@ The system includes a zero-dependency high-fidelity Oracle engine emulator, allo
 # 1. Start Oracle 21c XE container
 docker compose up -d oracle-db
 
-# 2. Apply database schemas, packages, triggers, and seed data
+# 2. Apply database schemas, packages, triggers, branching tables, and seed data
 source venv/bin/activate
 python scripts/setup_database.py
 
@@ -212,10 +266,10 @@ python scripts/setup_database.py
 
 ---
 
-## 7. Running Tests & Benchmarks
+## 8. Running Tests & Benchmarks
 
 ### Correctness Test Suite
-Run the 16 automated pytest unit & integration tests covering INSERT, UPDATE, DELETE, rollback semantics, checkpoints, adaptive policy decisions, diffs, and safe restorations:
+Run the 34 automated pytest unit & integration tests covering INSERT, UPDATE, DELETE, rollback semantics, checkpoints, adaptive policy decisions, diffs, safe restorations, and the 15 temporal branching & merge scenarios:
 
 ```bash
 source venv/bin/activate
@@ -242,7 +296,7 @@ Results are persisted to `benchmarks/results/` as JSON and CSV exports.
 
 ---
 
-## 8. REST API Reference
+## 9. REST API Reference
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
@@ -258,6 +312,15 @@ Results are persisted to `benchmarks/results/` as JSON and CSV exports.
 | `/api/checkpoints/decisions` | `GET` | Auditable decision log explaining trigger vs skip decisions |
 | `/api/restore/preview` | `POST` | Preview proposed restoration and validate constraints |
 | `/api/restore/execute` | `POST` | Commit safe restoration as a new forward transaction |
+| `/api/branches` | `GET`, `POST` | List all branches or create new branch from HEAD/timestamp/commit |
+| `/api/branches/{branch_id}` | `GET`, `DELETE` | Inspect branch metadata or safely delete branch |
+| `/api/branches/{branch_id}/commits` | `GET`, `POST` | Commit isolated DML changes or inspect branch commit history |
+| `/api/branches/{branch_id}/state` | `GET` | Reconstruct effective active records on the branch |
+| `/api/branches/{branch_id}/timeline` | `GET` | Get visual SVG commit graph nodes and merge links |
+| `/api/branches/compare` | `POST` | Compare two branches with fine-grained column deltas |
+| `/api/branches/merge` | `POST` | Execute three-way or fast-forward merge with conflict detection |
+| `/api/branches/merge/{merge_id}/resolve`| `POST` | Resolve detected merge conflicts with accepted values |
+| `/api/branches/merge/{merge_id}/abort` | `POST` | Abort a conflicted or pending merge operation |
 | `/api/benchmarks/run` | `POST` | Execute reproducible benchmark comparing all 3 strategies |
 | `/api/benchmarks/history` | `GET` | Historical benchmark run comparisons |
 | `/api/storage/stats` | `GET` | Detailed storage breakdown and budget utilization |
@@ -265,15 +328,15 @@ Results are persisted to `benchmarks/results/` as JSON and CSV exports.
 
 ---
 
-## 9. Documentation & Syllabus Mapping
+## 10. Documentation & Syllabus Mapping
 
 Comprehensive technical guides and course topic mappings are maintained in the [`docs/`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs) directory:
 
 | Document | Purpose |
 | :--- | :--- |
 | **[`CHAPTERWISE_TOPICS_MAPPING.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/CHAPTERWISE_TOPICS_MAPPING.md)** | **Complete chapter-by-chapter mapping of course slides (Ch 1–7, 13–14, 17–19) to project source files** |
-| **[`ARCHITECTURE.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/ARCHITECTURE.md)** | Three-tier architecture, same-transaction CDC, and reconstruction flow |
-| **[`DATABASE_DESIGN.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/DATABASE_DESIGN.md)** | E-R diagrams, table schemas, check constraints, and B-Tree indexing strategy |
+| **[`ARCHITECTURE.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/ARCHITECTURE.md)** | Three-tier architecture, same-transaction CDC, branching engine, and reconstruction flow |
+| **[`DATABASE_DESIGN.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/DATABASE_DESIGN.md)** | E-R diagrams, table schemas, check constraints, branching schema, and B-Tree indexing strategy |
 | **[`BENCHMARK_METHODOLOGY.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/BENCHMARK_METHODOLOGY.md)** | Synthetic workload generation comparing Log-Only, Fixed-Interval, and Adaptive policies |
 | **[`SQL_DEMONSTRATION.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/SQL_DEMONSTRATION.md)** | Step-by-step SQL*Plus / SQL Developer guide using Oracle JSON_TABLE projections |
 | **[`TESTING.md`](file:///Users/patnambhanuprakash/Desktop/DBMS/docs/TESTING.md)** | Automated test execution, unit suites, and diagnostic emulator verification |
@@ -281,5 +344,5 @@ Comprehensive technical guides and course topic mappings are maintained in the [
 
 ---
 
-## 10. License & Academic Attribution
-Developed as an advanced DBMS research implementation. Designed for high-integrity historical auditing and workload-aware database reconstruction.
+## 11. License & Academic Attribution
+Developed as an advanced DBMS research implementation. Designed for high-integrity historical auditing, temporal branching workspaces, and workload-aware database reconstruction.

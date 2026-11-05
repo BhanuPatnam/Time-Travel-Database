@@ -34,6 +34,8 @@ SQL_SCRIPTS = [
     "09_seed_data.sql",                     # Seed and initial baseline checkpoints
     "10_create_benchmark_objects.sql",      # Benchmark results schema
     "14_run_benchmarks.sql",                # TT_BENCHMARK_PKG (Pure PL/SQL benchmark suite)
+    "15_create_branching_tables.sql",       # Temporal branching schema tables
+    "16_create_branch_pkg.sql",             # TT_BRANCH_PKG Temporal branching & merge engine
     "11_verify_installation.sql",           # Verification script
 ]
 

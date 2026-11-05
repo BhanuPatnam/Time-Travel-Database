@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   LayoutDashboard, Database, History, GitCommit, 
-  GitCompare, Flag, BarChart3, RotateCcw, Settings, Server
+  GitCompare, Flag, BarChart3, RotateCcw, Settings, Server, GitBranch
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -19,6 +19,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
         { id: 'timetravel', label: 'Point-in-Time', icon: History },
         { id: 'timeline', label: 'Version Timeline', icon: GitCommit },
         { id: 'diff', label: 'Historical Diff', icon: GitCompare },
+        { id: 'branching', label: 'Temporal Branches', icon: GitBranch },
       ]
     },
     {

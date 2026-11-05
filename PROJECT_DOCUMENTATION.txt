@@ -172,6 +172,17 @@ delta-only, saving 80% to 90% storage space.
    - Committed and pushed entire project to GitHub:
      https://github.com/BhanuPatnam/Time-Travel-Database.git
 
+6. Temporal Branching & Merge System (GitHub-Inspired):
+   - Implemented native Oracle PL/SQL package TT_BRANCH_PKG.
+   - Created isolated branching tables: TT_BRANCHES, TT_BRANCH_COMMITS, 
+     TT_BRANCH_CHANGESET, and TT_BRANCH_MERGE_HISTORY.
+   - Built a copy-on-write changeset engine allowing independent branch CRUD 
+     without mutating production tables.
+   - Developed three-way merge engine with merge base (LCA) calculation, 
+     disjoint column auto-merging, fast-forwarding, and conflict detection.
+   - Built interactive React 19 visual SVG commit graph and 3-way conflict resolver.
+   - Expanded test suite to 34 automated pytest tests covering all 15 scenarios.
+
 ================================================================================
 6. COMPLETE FILE-BY-FILE BREAKDOWN
 ================================================================================
@@ -221,6 +232,14 @@ delta-only, saving 80% to 90% storage space.
 
 - 10_create_benchmark_objects.sql:
   Creates TT_BENCHMARK_RESULTS schema for logging empirical performance tests.
+
+- 15_create_branching_tables.sql:
+  Defines TT_BRANCHES, TT_BRANCH_COMMITS, TT_BRANCH_CHANGESET, and TT_BRANCH_MERGE_HISTORY 
+  tables, primary key sequences, and JSON constraints for GitHub-inspired branching.
+
+- 16_create_branch_pkg.sql:
+  Compiles TT_BRANCH_PKG package specification and body. Implements branch creation, 
+  commit recording, three-way merge base calculation, conflict detection, and merge resolution.
 
 - 11_verify_installation.sql:
   Automated PL/SQL verification script validating table existence, package validity, 
@@ -288,8 +307,13 @@ delta-only, saving 80% to 90% storage space.
 - app/api/settings.py & health.py:
   System configuration and health check telemetry endpoints.
 
-- tests/ (test_api.py, test_time_travel.py, test_checkpoints.py, etc.):
-  17 automated pytest test suites covering end-to-end functionality.
+- app/api/branches.py:
+  Complete REST endpoints for branch creation, commits, state reconstruction, branch diffing, 
+  three-way merges, conflict resolution, and SVG timeline generation.
+
+- tests/ (test_api.py, test_time_travel.py, test_checkpoints.py, test_branching.py, etc.):
+  34 automated pytest test suites covering end-to-end functionality including all 15 
+  branching and merge scenarios (100% passing).
 
 --------------------------------------------------------------------------------
 6.3. FRONTEND MODULES (frontend/)
@@ -332,6 +356,11 @@ delta-only, saving 80% to 90% storage space.
 
 - src/pages/DiffViewerPage.jsx:
   Historical state comparator displaying row-level mutations between two timestamps.
+
+- src/pages/BranchingPage.jsx:
+  GitHub-inspired temporal branching operations console. Features an interactive 
+  dynamic SVG commit graph (zoom, pan, multicolor branch tracks), branch switcher, 
+  commit inspector, branch table state browser, and 3-way conflict resolver.
 
 - src/pages/CheckpointManagerPage.jsx:
   Materialized boundary manager and adaptive decision audit trail viewer.

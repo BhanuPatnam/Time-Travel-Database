@@ -1,7 +1,8 @@
 import time
 import json
+import copy
 from datetime import datetime, timezone, timedelta
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 
 class OracleEngineEmulator:
     """
@@ -32,6 +33,10 @@ class OracleEngineEmulator:
         self.seq_cp_data = 100
         self.seq_policy_decision = 5
         self.seq_query_metric = 1
+        self.seq_branch = 1
+        self.seq_branch_commit = 101
+        self.seq_changeset = 1
+        self.seq_merge = 1
 
         # Base tables
         self.customers: Dict[str, Dict[str, Any]] = {}
@@ -46,6 +51,10 @@ class OracleEngineEmulator:
         self.checkpoint_data: List[Dict[str, Any]] = []
         self.policy_decisions: List[Dict[str, Any]] = []
         self.query_metrics: List[Dict[str, Any]] = []
+        self.branches: List[Dict[str, Any]] = []
+        self.branch_commits: List[Dict[str, Any]] = []
+        self.branch_changesets: List[Dict[str, Any]] = []
+        self.branch_merges: List[Dict[str, Any]] = []
         self.config: Dict[str, str] = {
             "DEFAULT_STRATEGY": "ADAPTIVE",
             "FIXED_INTERVAL_CHANGES": "50",
@@ -243,6 +252,33 @@ class OracleEngineEmulator:
             "action_taken": "SKIPPED_BELOW_THRESHOLD",
             "decision_reason": "Changes (2/25) and cost (0.9ms/12.0ms) remain below trigger threshold. Replay is more cost-effective.",
             "checkpoint_id": None
+        })
+
+        # 3. Seed default 'main' branch and initial commit
+        main_now = self._past_iso(120)
+        self.branches.append({
+            "branch_id": 1,
+            "branch_name": "main",
+            "parent_branch_id": None,
+            "parent_name": None,
+            "base_commit_id": "c-main-init",
+            "base_timestamp": main_now,
+            "created_at": main_now,
+            "created_by": "SYSTEM",
+            "branch_status": "ACTIVE",
+            "is_default": "Y",
+            "description": "Production default database branch"
+        })
+        self.branch_commits.append({
+            "commit_id": "c-main-init",
+            "branch_id": 1,
+            "parent_commit_id": None,
+            "commit_message": "Initial baseline from production database",
+            "commit_timestamp": main_now,
+            "commit_order_seq": 1,
+            "author": "SYSTEM",
+            "commit_type": "INITIAL",
+            "merge_parent_commit_id": None
         })
 
     # --- RECONSTRUCTION LOGIC ---
@@ -870,6 +906,883 @@ class OracleEngineEmulator:
             "budget_mb": budget_mb,
             "usage_percentage": usage_pct
         }
+
+    # =========================================================================
+    # TEMPORAL BRANCHING & MERGE ENGINE
+    # =========================================================================
+
+    def _resolve_branch(self, branch_id_or_name: Union[int, str]) -> Dict[str, Any]:
+        """Resolves active branch by ID or name."""
+        s = str(branch_id_or_name).strip()
+        for b in self.branches:
+            if b.get("branch_status") != "DELETED":
+                if str(b["branch_id"]) == s or b["branch_name"].lower() == s.lower():
+                    return b
+        raise ValueError(f"Branch not found: {branch_id_or_name}")
+
+    def _get_branch_head(self, branch_id: int) -> Optional[str]:
+        """Returns head commit_id for a branch."""
+        commits = [c for c in self.branch_commits if c["branch_id"] == branch_id]
+        if not commits:
+            return None
+        commits.sort(key=lambda x: (x.get("commit_order_seq", 0), x.get("commit_timestamp", "")), reverse=True)
+        return commits[0]["commit_id"]
+
+    def create_branch(
+        self,
+        branch_name: str,
+        parent_branch_name: str = "main",
+        base_timestamp: Optional[str] = None,
+        base_commit_id: Optional[str] = None,
+        created_by: str = "developer",
+        description: Optional[str] = None
+    ) -> Dict[str, Any]:
+        bname = branch_name.strip()
+        if not bname:
+            raise ValueError("Branch name cannot be empty")
+
+        for b in self.branches:
+            if b.get("branch_status") != "DELETED" and b["branch_name"].lower() == bname.lower():
+                raise ValueError(f"Branch already exists: {branch_name}")
+
+        parent = None
+        if parent_branch_name:
+            try:
+                parent = self._resolve_branch(parent_branch_name)
+            except ValueError:
+                parent = None
+
+        parent_id = parent["branch_id"] if parent else None
+        parent_name = parent["branch_name"] if parent else None
+
+        if parent and not base_commit_id:
+            base_commit_id = self._get_branch_head(parent["branch_id"])
+
+        if not base_timestamp:
+            if base_commit_id:
+                for c in self.branch_commits:
+                    if c["commit_id"] == base_commit_id:
+                        base_timestamp = c["commit_timestamp"]
+                        break
+            if not base_timestamp:
+                base_timestamp = self._now_iso()
+        else:
+            base_timestamp = self._normalize_iso(base_timestamp)
+
+        self.seq_branch += 1
+        new_branch_id = self.seq_branch
+        now_ts = self._now_iso()
+
+        new_branch = {
+            "branch_id": new_branch_id,
+            "branch_name": bname,
+            "parent_branch_id": parent_id,
+            "parent_name": parent_name,
+            "base_commit_id": base_commit_id,
+            "base_timestamp": base_timestamp,
+            "created_at": now_ts,
+            "created_by": created_by or "developer",
+            "branch_status": "ACTIVE",
+            "is_default": "N",
+            "description": description or f"Branch branched from {parent_name or 'main'}"
+        }
+        self.branches.append(new_branch)
+
+        # Create initial commit for the branch
+        self.seq_branch_commit += 1
+        self.seq_commit += 1
+        init_commit_id = f"c{self.seq_branch_commit}"
+        init_commit = {
+            "commit_id": init_commit_id,
+            "branch_id": new_branch_id,
+            "parent_commit_id": base_commit_id,
+            "commit_message": f"Branch created from {parent_name or 'main'}",
+            "commit_timestamp": now_ts,
+            "commit_order_seq": self.seq_commit,
+            "author": created_by or "developer",
+            "commit_type": "INITIAL",
+            "merge_parent_commit_id": None
+        }
+        self.branch_commits.append(init_commit)
+
+        return self.get_branch(new_branch_id)
+
+    def list_branches(self) -> List[Dict[str, Any]]:
+        result = []
+        for b in self.branches:
+            if b.get("branch_status") == "DELETED":
+                continue
+            b_copy = dict(b)
+            commits = [c for c in self.branch_commits if c["branch_id"] == b["branch_id"]]
+            b_copy["commit_count"] = len(commits)
+            if commits:
+                commits.sort(key=lambda x: (x.get("commit_order_seq", 0), x.get("commit_timestamp", "")), reverse=True)
+                b_copy["head_commit_id"] = commits[0]["commit_id"]
+                b_copy["head_commit_message"] = commits[0]["commit_message"]
+            else:
+                b_copy["head_commit_id"] = None
+                b_copy["head_commit_message"] = None
+            result.append(b_copy)
+        result.sort(key=lambda x: (1 if x["is_default"] == "Y" else 0, x["created_at"]), reverse=True)
+        return result
+
+    def get_branch(self, branch_id_or_name: Union[int, str]) -> Dict[str, Any]:
+        b = self._resolve_branch(branch_id_or_name)
+        b_copy = dict(b)
+        commits = [c for c in self.branch_commits if c["branch_id"] == b["branch_id"]]
+        b_copy["commit_count"] = len(commits)
+        if commits:
+            commits.sort(key=lambda x: (x.get("commit_order_seq", 0), x.get("commit_timestamp", "")), reverse=True)
+            b_copy["head_commit_id"] = commits[0]["commit_id"]
+            b_copy["head_commit_message"] = commits[0]["commit_message"]
+        else:
+            b_copy["head_commit_id"] = None
+            b_copy["head_commit_message"] = None
+        return b_copy
+
+    def delete_branch(self, branch_id_or_name: Union[int, str]) -> Dict[str, Any]:
+        b = self._resolve_branch(branch_id_or_name)
+        if b.get("is_default") == "Y":
+            raise ValueError("Cannot delete the default branch (main)")
+        b["branch_status"] = "DELETED"
+        return {"status": "DELETED", "branch_id": b["branch_id"], "branch_name": b["branch_name"]}
+
+    def create_branch_commit(
+        self,
+        branch_id_or_name: Union[int, str],
+        commit_message: str,
+        author: str = "developer",
+        changes: Optional[List[Dict[str, Any]]] = None,
+        parent_commit_id: Optional[str] = None,
+        commit_type: str = "NORMAL",
+        merge_parent_commit_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        b = self._resolve_branch(branch_id_or_name)
+        msg = commit_message.strip()
+        if not msg:
+            raise ValueError("Commit message cannot be empty")
+
+        if not parent_commit_id:
+            parent_commit_id = self._get_branch_head(b["branch_id"])
+
+        self.seq_branch_commit += 1
+        self.seq_commit += 1
+        commit_id = f"c{self.seq_branch_commit}"
+        now_ts = self._now_iso()
+
+        commit_record = {
+            "commit_id": commit_id,
+            "branch_id": b["branch_id"],
+            "parent_commit_id": parent_commit_id,
+            "commit_message": msg,
+            "commit_timestamp": now_ts,
+            "commit_order_seq": self.seq_commit,
+            "author": author or "developer",
+            "commit_type": commit_type or "NORMAL",
+            "merge_parent_commit_id": merge_parent_commit_id
+        }
+        self.branch_commits.append(commit_record)
+
+        # Store changesets
+        changes_list = changes or []
+        for chg in changes_list:
+            self.seq_changeset += 1
+            tbl = chg.get("table_name", "").upper()
+            op = chg.get("operation_type", "UPDATE").upper()
+            before_val = chg.get("before_values")
+            after_val = chg.get("after_values")
+            delta_val = chg.get("delta_values")
+            changed_cols = chg.get("changed_columns")
+            if not changed_cols and before_val and after_val:
+                changed_cols = ",".join(k for k in after_val if before_val.get(k) != after_val.get(k))
+
+            self.branch_changesets.append({
+                "changeset_id": self.seq_changeset,
+                "commit_id": commit_id,
+                "table_name": tbl,
+                "record_id": str(chg.get("record_id")),
+                "operation_type": op,
+                "before_values": before_val,
+                "after_values": after_val,
+                "delta_values": delta_val,
+                "changed_columns": changed_cols
+            })
+
+        commit_copy = dict(commit_record)
+        commit_copy["changeset_count"] = len(changes_list)
+        commit_copy["changes"] = [cs for cs in self.branch_changesets if cs["commit_id"] == commit_id]
+        return commit_copy
+
+    def get_branch_commits(self, branch_id_or_name: Union[int, str]) -> List[Dict[str, Any]]:
+        b = self._resolve_branch(branch_id_or_name)
+        commits = [c for c in self.branch_commits if c["branch_id"] == b["branch_id"]]
+        commits.sort(key=lambda x: (x.get("commit_order_seq", 0), x.get("commit_timestamp", "")), reverse=True)
+
+        result = []
+        for c in commits:
+            c_copy = dict(c)
+            cs_list = [cs for cs in self.branch_changesets if cs["commit_id"] == c["commit_id"]]
+            c_copy["changeset_count"] = len(cs_list)
+            c_copy["changes"] = cs_list
+            result.append(c_copy)
+        return result
+
+    def get_branch_state(
+        self,
+        branch_id_or_name: Union[int, str],
+        table_name: str = "__ALL__",
+        commit_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Reconstructs the effective state of a branch up to a specific commit.
+        Starts from the base state and sequentially replays changesets.
+        """
+        b = self._resolve_branch(branch_id_or_name)
+        tbl = table_name.upper()
+
+        target_commit_id = commit_id or self._get_branch_head(b["branch_id"])
+
+        # 1. Base table state
+        state: Dict[str, Dict[str, Dict[str, Any]]] = {
+            "CUSTOMERS": {},
+            "PRODUCTS": {},
+            "ORDERS": {},
+            "ORDER_ITEMS": {}
+        }
+
+        # If branch has parent and base commit, get baseline
+        if b.get("parent_branch_id") and b.get("base_commit_id"):
+            parent_b = self._resolve_branch(b["parent_branch_id"])
+            if parent_b["branch_name"] == "main" and b.get("base_timestamp"):
+                for t in ["CUSTOMERS", "PRODUCTS", "ORDERS"]:
+                    t_recon = self.reconstruct_table(t, b["base_timestamp"])
+                    for row in t_recon["rows"]:
+                        pk_field = "customer_id" if t == "CUSTOMERS" else ("product_id" if t == "PRODUCTS" else "order_id")
+                        pk = str(row[pk_field])
+                        state[t][pk] = copy.deepcopy(row)
+            else:
+                parent_state = self.get_branch_state(parent_b["branch_id"], "__ALL__", b["base_commit_id"])
+                for row in parent_state.get("records", []):
+                    t = row.get("_table", "CUSTOMERS")
+                    pk = str(row.get("customer_id") or row.get("product_id") or row.get("order_id") or row.get("item_id"))
+                    state[t][pk] = {k: v for k, v in row.items() if not k.startswith("_")}
+        else:
+            # Baseline from current state at base_timestamp
+            for t in ["CUSTOMERS", "PRODUCTS", "ORDERS"]:
+                t_recon = self.reconstruct_table(t, b["base_timestamp"])
+                for row in t_recon["rows"]:
+                    pk_field = "customer_id" if t == "CUSTOMERS" else ("product_id" if t == "PRODUCTS" else "order_id")
+                    pk = str(row[pk_field])
+                    state[t][pk] = copy.deepcopy(row)
+
+        # 2. Collect commits in order up to target_commit_id
+        branch_commits = [c for c in self.branch_commits if c["branch_id"] == b["branch_id"]]
+        branch_commits.sort(key=lambda x: x["commit_order_seq"])
+
+        active_commits = []
+        for c in branch_commits:
+            active_commits.append(c)
+            if target_commit_id and c["commit_id"] == target_commit_id:
+                break
+
+        # 3. Apply changesets
+        for c in active_commits:
+            cs_list = [cs for cs in self.branch_changesets if cs["commit_id"] == c["commit_id"]]
+            cs_list.sort(key=lambda x: x["changeset_id"])
+            for cs in cs_list:
+                t = cs["table_name"]
+                rec_id = str(cs["record_id"])
+                op = cs["operation_type"]
+                if t not in state:
+                    state[t] = {}
+
+                if op == "INSERT":
+                    state[t][rec_id] = copy.deepcopy(cs["after_values"])
+                elif op == "UPDATE":
+                    if rec_id in state[t]:
+                        if cs.get("after_values"):
+                            state[t][rec_id].update(cs["after_values"])
+                        elif cs.get("delta_values"):
+                            for k, v in cs["delta_values"].items():
+                                state[t][rec_id][k] = v.get("new") if isinstance(v, dict) else v
+                    else:
+                        state[t][rec_id] = copy.deepcopy(cs.get("after_values", {}))
+                elif op == "DELETE":
+                    state[t].pop(rec_id, None)
+
+        # 4. Filter output
+        records = []
+        tables_to_include = ["CUSTOMERS", "PRODUCTS", "ORDERS", "ORDER_ITEMS"] if tbl == "__ALL__" else [tbl]
+        for t in tables_to_include:
+            for pk, row in state.get(t, {}).items():
+                r = copy.deepcopy(row)
+                r["_table"] = t
+                records.append(r)
+
+        return {
+            "branch_id": b["branch_id"],
+            "branch_name": b["branch_name"],
+            "commit_id": target_commit_id,
+            "table_name": tbl,
+            "total_records": len(records),
+            "records": records
+        }
+
+    def calculate_merge_base(
+        self,
+        source_branch_name_or_id: Union[int, str],
+        target_branch_name_or_id: Union[int, str]
+    ) -> Optional[str]:
+        src = self._resolve_branch(source_branch_name_or_id)
+        tgt = self._resolve_branch(target_branch_name_or_id)
+
+        src_head = self._get_branch_head(src["branch_id"])
+        tgt_head = self._get_branch_head(tgt["branch_id"])
+
+        def get_ancestors(commit_id: Optional[str]) -> Dict[str, int]:
+            ancestors = {}
+            queue = [commit_id] if commit_id else []
+            visited = set()
+            while queue:
+                curr = queue.pop(0)
+                if not curr or curr in visited:
+                    continue
+                visited.add(curr)
+                commit_obj = next((c for c in self.branch_commits if c["commit_id"] == curr), None)
+                if commit_obj:
+                    ancestors[curr] = commit_obj.get("commit_order_seq", 0)
+                    if commit_obj.get("parent_commit_id"):
+                        queue.append(commit_obj["parent_commit_id"])
+                    if commit_obj.get("merge_parent_commit_id"):
+                        queue.append(commit_obj["merge_parent_commit_id"])
+            return ancestors
+
+        src_anc = get_ancestors(src_head)
+        tgt_anc = get_ancestors(tgt_head)
+
+        common = set(src_anc.keys()) & set(tgt_anc.keys())
+        if not common:
+            return src.get("base_commit_id") or tgt.get("base_commit_id")
+
+        sorted_common = sorted(common, key=lambda c: src_anc[c], reverse=True)
+        return sorted_common[0]
+
+    def compare_branches(
+        self,
+        base_branch_name_or_id: Union[int, str],
+        compare_branch_name_or_id: Union[int, str]
+    ) -> Dict[str, Any]:
+        base_b = self._resolve_branch(base_branch_name_or_id)
+        comp_b = self._resolve_branch(compare_branch_name_or_id)
+
+        merge_base = self.calculate_merge_base(comp_b["branch_id"], base_b["branch_id"])
+
+        base_state = self.get_branch_state(base_b["branch_id"], "__ALL__")
+        comp_state = self.get_branch_state(comp_b["branch_id"], "__ALL__")
+
+        def index_state(recs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+            indexed = {}
+            for r in recs:
+                t = r.get("_table", "CUSTOMERS")
+                pk_val = str(r.get("customer_id") or r.get("product_id") or r.get("order_id") or r.get("item_id"))
+                key = f"{t}:{pk_val}"
+                indexed[key] = {k: v for k, v in r.items() if not k.startswith("_")}
+            return indexed
+
+        base_idx = index_state(base_state["records"])
+        comp_idx = index_state(comp_state["records"])
+
+        all_keys = set(base_idx.keys()) | set(comp_idx.keys())
+        changes = []
+        added = 0
+        modified = 0
+        deleted = 0
+
+        for key in sorted(all_keys):
+            tbl, pk = key.split(":", 1)
+            b_row = base_idx.get(key)
+            c_row = comp_idx.get(key)
+
+            if not b_row and c_row:
+                added += 1
+                changes.append({
+                    "table_name": tbl,
+                    "record_id": pk,
+                    "operation_type": "INSERT",
+                    "changed_columns": "ALL",
+                    "before_values": None,
+                    "after_values": c_row,
+                    "delta_values": None
+                })
+            elif b_row and not c_row:
+                deleted += 1
+                changes.append({
+                    "table_name": tbl,
+                    "record_id": pk,
+                    "operation_type": "DELETE",
+                    "changed_columns": "ALL",
+                    "before_values": b_row,
+                    "after_values": None,
+                    "delta_values": None
+                })
+            elif b_row != c_row:
+                diff_cols = [k for k in set(b_row.keys()) | set(c_row.keys()) if b_row.get(k) != c_row.get(k) and k not in {"created_at", "updated_at"}]
+                if diff_cols:
+                    modified += 1
+                    delta = {c: {"old": b_row.get(c), "new": c_row.get(c)} for c in diff_cols}
+                    changes.append({
+                        "table_name": tbl,
+                        "record_id": pk,
+                        "operation_type": "UPDATE",
+                        "changed_columns": ",".join(diff_cols),
+                        "before_values": b_row,
+                        "after_values": c_row,
+                        "delta_values": delta
+                    })
+
+        return {
+            "base_branch": base_b["branch_name"],
+            "compare_branch": comp_b["branch_name"],
+            "merge_base_commit": merge_base,
+            "total_changes": len(changes),
+            "added_count": added,
+            "modified_count": modified,
+            "deleted_count": deleted,
+            "changes": changes
+        }
+
+    def merge_branches(
+        self,
+        source_branch: Union[int, str],
+        target_branch: Union[int, str] = "main",
+        merge_message: Optional[str] = None,
+        author: str = "developer",
+        resolution_strategy: str = "AUTO",
+        resolved_conflicts: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        src = self._resolve_branch(source_branch)
+        tgt = self._resolve_branch(target_branch)
+
+        src_head = self._get_branch_head(src["branch_id"])
+        tgt_head = self._get_branch_head(tgt["branch_id"])
+        merge_base = self.calculate_merge_base(src["branch_id"], tgt["branch_id"])
+
+        self.seq_merge += 1
+        merge_id = self.seq_merge
+        msg = merge_message or f"Merge branch '{src['branch_name']}' into '{tgt['branch_name']}'"
+
+        # 1. Fast-Forward Check
+        if tgt_head == merge_base:
+            self.seq_branch_commit += 1
+            self.seq_commit += 1
+            merge_commit_id = f"c{self.seq_branch_commit}"
+            now_ts = self._now_iso()
+
+            merge_commit = {
+                "commit_id": merge_commit_id,
+                "branch_id": tgt["branch_id"],
+                "parent_commit_id": tgt_head,
+                "commit_message": f"{msg} (fast-forward)",
+                "commit_timestamp": now_ts,
+                "commit_order_seq": self.seq_commit,
+                "author": author or "developer",
+                "commit_type": "FAST_FORWARD",
+                "merge_parent_commit_id": src_head
+            }
+            self.branch_commits.append(merge_commit)
+
+            # Copy source changesets
+            src_commits = [c["commit_id"] for c in self.branch_commits if c["branch_id"] == src["branch_id"]]
+            for cs in [c for c in self.branch_changesets if c["commit_id"] in src_commits]:
+                self.seq_changeset += 1
+                new_cs = dict(cs)
+                new_cs["changeset_id"] = self.seq_changeset
+                new_cs["commit_id"] = merge_commit_id
+                self.branch_changesets.append(new_cs)
+
+            self.branch_merges.append({
+                "merge_id": merge_id,
+                "source_branch_id": src["branch_id"],
+                "target_branch_id": tgt["branch_id"],
+                "source_commit_id": src_head,
+                "target_commit_id": tgt_head,
+                "merge_commit_id": merge_commit_id,
+                "merge_status": "SUCCESS",
+                "merge_type": "FAST_FORWARD",
+                "merge_timestamp": now_ts,
+                "conflicts_count": 0,
+                "merge_message": msg,
+                "conflict_details": None
+            })
+
+            return {
+                "status": "SUCCESS",
+                "merge_type": "FAST_FORWARD",
+                "merge_id": merge_id,
+                "merge_commit_id": merge_commit_id,
+                "conflicts_count": 0,
+                "conflicts": [],
+                "message": "Fast-forward merge completed successfully"
+            }
+
+        # 2. Three-Way Merge
+        base_state = self.get_branch_state(tgt["branch_id"], "__ALL__", commit_id=merge_base)
+        src_state = self.get_branch_state(src["branch_id"], "__ALL__", commit_id=src_head)
+        tgt_state = self.get_branch_state(tgt["branch_id"], "__ALL__", commit_id=tgt_head)
+
+        def index_state(recs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+            indexed = {}
+            for r in recs:
+                t = r.get("_table", "CUSTOMERS")
+                pk_val = str(r.get("customer_id") or r.get("product_id") or r.get("order_id") or r.get("item_id"))
+                key = f"{t}:{pk_val}"
+                indexed[key] = {k: v for k, v in r.items() if not k.startswith("_")}
+            return indexed
+
+        base_idx = index_state(base_state["records"])
+        src_idx = index_state(src_state["records"])
+        tgt_idx = index_state(tgt_state["records"])
+
+        all_keys = set(base_idx.keys()) | set(src_idx.keys()) | set(tgt_idx.keys())
+        conflicts = []
+        clean_applied_changes = []
+
+        # Map resolved conflicts by key if provided
+        resolutions_by_key = {}
+        if resolved_conflicts:
+            for res in resolved_conflicts:
+                k = f"{res.get('table_name')}:{res.get('record_id')}"
+                resolutions_by_key[k] = res
+
+        for key in sorted(all_keys):
+            tbl, pk = key.split(":", 1)
+            b_val = base_idx.get(key)
+            s_val = src_idx.get(key)
+            t_val = tgt_idx.get(key)
+
+            # Unchanged in both
+            if s_val == b_val and t_val == b_val:
+                continue
+
+            # Changed only in source
+            if s_val != b_val and t_val == b_val:
+                op = "DELETE" if not s_val else ("INSERT" if not b_val else "UPDATE")
+                clean_applied_changes.append({
+                    "table_name": tbl,
+                    "record_id": pk,
+                    "operation_type": op,
+                    "before_values": t_val,
+                    "after_values": s_val,
+                    "delta_values": None
+                })
+                continue
+
+            # Changed only in target
+            if s_val == b_val and t_val != b_val:
+                # Keep target change
+                continue
+
+            # Changed in both!
+            if s_val != b_val and t_val != b_val:
+                # Case 1: Both deleted
+                if not s_val and not t_val:
+                    continue
+
+                # Case 2: One deleted, other updated
+                if not s_val or not t_val:
+                    conflict_obj = {
+                        "table_name": tbl,
+                        "record_id": pk,
+                        "conflict_type": "DELETE_VS_UPDATE",
+                        "source_op": "DELETE" if not s_val else "UPDATE",
+                        "target_op": "DELETE" if not t_val else "UPDATE",
+                        "base_values": b_val,
+                        "source_values": s_val,
+                        "target_values": t_val
+                    }
+                    if key in resolutions_by_key:
+                        res = resolutions_by_key[key]
+                        clean_applied_changes.append({
+                            "table_name": tbl,
+                            "record_id": pk,
+                            "operation_type": res.get("operation_type", "UPDATE"),
+                            "before_values": t_val,
+                            "after_values": res.get("resolved_values"),
+                            "delta_values": None
+                        })
+                    else:
+                        conflicts.append(conflict_obj)
+                    continue
+
+                # Case 3: Both inserted
+                if not b_val:
+                    if s_val == t_val:
+                        continue  # Clean
+                    conflict_obj = {
+                        "table_name": tbl,
+                        "record_id": pk,
+                        "conflict_type": "CONCURRENT_INSERT",
+                        "source_op": "INSERT",
+                        "target_op": "INSERT",
+                        "base_values": None,
+                        "source_values": s_val,
+                        "target_values": t_val
+                    }
+                    if key in resolutions_by_key:
+                        res = resolutions_by_key[key]
+                        clean_applied_changes.append({
+                            "table_name": tbl,
+                            "record_id": pk,
+                            "operation_type": "INSERT",
+                            "before_values": None,
+                            "after_values": res.get("resolved_values"),
+                            "delta_values": None
+                        })
+                    else:
+                        conflicts.append(conflict_obj)
+                    continue
+
+                # Case 4: Both updated - check column divergence
+                cols_changed_in_s = {k for k in set(b_val.keys()) | set(s_val.keys()) if b_val.get(k) != s_val.get(k)}
+                cols_changed_in_t = {k for k in set(b_val.keys()) | set(t_val.keys()) if b_val.get(k) != t_val.get(k)}
+                overlapping_cols = cols_changed_in_s & cols_changed_in_t
+
+                conflicting_cols = [c for c in overlapping_cols if s_val.get(c) != t_val.get(c)]
+
+                if conflicting_cols:
+                    conflict_obj = {
+                        "table_name": tbl,
+                        "record_id": pk,
+                        "conflict_type": "SAME_COLUMN_MODIFICATION",
+                        "conflicting_columns": conflicting_cols,
+                        "source_op": "UPDATE",
+                        "target_op": "UPDATE",
+                        "base_values": b_val,
+                        "source_values": s_val,
+                        "target_values": t_val
+                    }
+                    if key in resolutions_by_key:
+                        res = resolutions_by_key[key]
+                        clean_applied_changes.append({
+                            "table_name": tbl,
+                            "record_id": pk,
+                            "operation_type": "UPDATE",
+                            "before_values": t_val,
+                            "after_values": res.get("resolved_values"),
+                            "delta_values": None
+                        })
+                    else:
+                        conflicts.append(conflict_obj)
+                else:
+                    # Column-level automatic clean merge!
+                    merged_row = copy.deepcopy(b_val)
+                    for c in cols_changed_in_t:
+                        merged_row[c] = t_val.get(c)
+                    for c in cols_changed_in_s:
+                        merged_row[c] = s_val.get(c)
+
+                    clean_applied_changes.append({
+                        "table_name": tbl,
+                        "record_id": pk,
+                        "operation_type": "UPDATE",
+                        "before_values": t_val,
+                        "after_values": merged_row,
+                        "delta_values": None,
+                        "changed_columns": ",".join(cols_changed_in_s)
+                    })
+
+        # If conflicts exist and not resolved, record conflict state
+        if conflicts:
+            self.branch_merges.append({
+                "merge_id": merge_id,
+                "source_branch_id": src["branch_id"],
+                "target_branch_id": tgt["branch_id"],
+                "source_commit_id": src_head,
+                "target_commit_id": tgt_head,
+                "merge_commit_id": None,
+                "merge_status": "CONFLICT",
+                "merge_type": "THREE_WAY",
+                "merge_timestamp": self._now_iso(),
+                "conflicts_count": len(conflicts),
+                "merge_message": msg,
+                "conflict_details": conflicts
+            })
+            return {
+                "status": "CONFLICT",
+                "merge_type": "THREE_WAY",
+                "merge_id": merge_id,
+                "conflicts_count": len(conflicts),
+                "conflicts": conflicts,
+                "message": f"Merge has {len(conflicts)} conflict(s). Resolution required."
+            }
+
+        # Otherwise, commit the 3-way merge
+        self.seq_branch_commit += 1
+        self.seq_commit += 1
+        merge_commit_id = f"c{self.seq_branch_commit}"
+        now_ts = self._now_iso()
+
+        merge_commit = {
+            "commit_id": merge_commit_id,
+            "branch_id": tgt["branch_id"],
+            "parent_commit_id": tgt_head,
+            "commit_message": msg,
+            "commit_timestamp": now_ts,
+            "commit_order_seq": self.seq_commit,
+            "author": author or "developer",
+            "commit_type": "MERGE",
+            "merge_parent_commit_id": src_head
+        }
+        self.branch_commits.append(merge_commit)
+
+        for chg in clean_applied_changes:
+            self.seq_changeset += 1
+            self.branch_changesets.append({
+                "changeset_id": self.seq_changeset,
+                "commit_id": merge_commit_id,
+                "table_name": chg["table_name"],
+                "record_id": chg["record_id"],
+                "operation_type": chg["operation_type"],
+                "before_values": chg.get("before_values"),
+                "after_values": chg.get("after_values"),
+                "delta_values": chg.get("delta_values"),
+                "changed_columns": chg.get("changed_columns", "resolved_or_merged")
+            })
+
+        self.branch_merges.append({
+            "merge_id": merge_id,
+            "source_branch_id": src["branch_id"],
+            "target_branch_id": tgt["branch_id"],
+            "source_commit_id": src_head,
+            "target_commit_id": tgt_head,
+            "merge_commit_id": merge_commit_id,
+            "merge_status": "SUCCESS",
+            "merge_type": "THREE_WAY",
+            "merge_timestamp": now_ts,
+            "conflicts_count": 0,
+            "merge_message": msg,
+            "conflict_details": None
+        })
+
+        return {
+            "status": "SUCCESS",
+            "merge_type": "THREE_WAY",
+            "merge_id": merge_id,
+            "merge_commit_id": merge_commit_id,
+            "conflicts_count": 0,
+            "conflicts": [],
+            "message": "Three-way merge completed successfully"
+        }
+
+    def resolve_merge_conflict(
+        self,
+        merge_id: int,
+        resolutions: List[Dict[str, Any]],
+        author: str = "developer"
+    ) -> Dict[str, Any]:
+        merge_rec = next((m for m in self.branch_merges if m["merge_id"] == merge_id), None)
+        if not merge_rec:
+            raise ValueError(f"Merge operation #{merge_id} not found")
+        if merge_rec["merge_status"] != "CONFLICT":
+            raise ValueError(f"Merge operation #{merge_id} is not in CONFLICT status")
+
+        src = self._resolve_branch(merge_rec["source_branch_id"])
+        tgt = self._resolve_branch(merge_rec["target_branch_id"])
+
+        return self.merge_branches(
+            source_branch=src["branch_id"],
+            target_branch=tgt["branch_id"],
+            merge_message=f"Resolved merge: {merge_rec.get('merge_message')}",
+            author=author,
+            resolution_strategy="MANUAL",
+            resolved_conflicts=resolutions
+        )
+
+    def abort_merge(self, merge_id: int) -> Dict[str, Any]:
+        merge_rec = next((m for m in self.branch_merges if m["merge_id"] == merge_id), None)
+        if not merge_rec:
+            raise ValueError(f"Merge operation #{merge_id} not found")
+        merge_rec["merge_status"] = "ABORTED"
+        return {"status": "ABORTED", "merge_id": merge_id, "message": "Merge cancelled successfully"}
+
+    def get_branch_timeline(self, branch_id_or_name: Optional[Union[int, str]] = None) -> Dict[str, Any]:
+        """
+        Builds graph data (nodes, links, branches, lanes) for SVG visualization.
+        """
+        palette = ["#6366f1", "#10b981", "#ec4899", "#f59e0b", "#06b6d4", "#8b5cf6", "#14b8a6", "#f43f5e"]
+        branches_data = []
+        branch_lane_map = {}
+
+        active_branches = [b for b in self.branches if b.get("branch_status") != "DELETED"]
+        # Ensure 'main' is lane 0
+        main_b = next((b for b in active_branches if b.get("is_default") == "Y"), active_branches[0] if active_branches else None)
+
+        ordered_branches = []
+        if main_b:
+            ordered_branches.append(main_b)
+        for b in active_branches:
+            if b != main_b:
+                ordered_branches.append(b)
+
+        for idx, b in enumerate(ordered_branches):
+            color = palette[idx % len(palette)]
+            branch_lane_map[b["branch_id"]] = idx
+            branches_data.append({
+                "branch_id": b["branch_id"],
+                "branch_name": b["branch_name"],
+                "is_default": b.get("is_default") == "Y",
+                "color": color,
+                "lane": idx
+            })
+
+        all_commits = list(self.branch_commits)
+        all_commits.sort(key=lambda x: x["commit_order_seq"])
+
+        nodes = []
+        for c in all_commits:
+            b_id = c["branch_id"]
+            lane = branch_lane_map.get(b_id, 0)
+            branch_info = next((b for b in branches_data if b["branch_id"] == b_id), None)
+            color = branch_info["color"] if branch_info else "#6366f1"
+            cs_count = len([cs for cs in self.branch_changesets if cs["commit_id"] == c["commit_id"]])
+
+            nodes.append({
+                "commit_id": c["commit_id"],
+                "branch_id": b_id,
+                "branch_name": branch_info["branch_name"] if branch_info else "unknown",
+                "commit_message": c["commit_message"],
+                "commit_timestamp": c["commit_timestamp"],
+                "commit_order_seq": c.get("commit_order_seq", 0),
+                "author": c.get("author", "developer"),
+                "commit_type": c.get("commit_type", "NORMAL"),
+                "parent_commit_id": c.get("parent_commit_id"),
+                "merge_parent_commit_id": c.get("merge_parent_commit_id"),
+                "changeset_count": cs_count,
+                "lane": lane,
+                "color": color
+            })
+
+        links = []
+        for n in nodes:
+            if n.get("parent_commit_id"):
+                links.append({
+                    "source": n["parent_commit_id"],
+                    "target": n["commit_id"],
+                    "type": "direct"
+                })
+            if n.get("merge_parent_commit_id"):
+                links.append({
+                    "source": n["merge_parent_commit_id"],
+                    "target": n["commit_id"],
+                    "type": "merge"
+                })
+
+        return {
+            "branches": branches_data,
+            "nodes": nodes,
+            "links": links
+        }
+
 
 # Global singleton emulator
 oracle_emulator = OracleEngineEmulator()
