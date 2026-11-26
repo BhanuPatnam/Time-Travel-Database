@@ -108,3 +108,43 @@ def test_crud_insert_update_delete_and_timeline():
     tl_final = client.get(f"/api/timeline/CUSTOMERS/{new_pk}").json()["timeline"]
     assert len(tl_final) == 3
     assert tl_final[2]["operation_type"] == "DELETE"
+
+def test_order_multiple_products_and_referential_integrity():
+    # 1. Create an order with 1 customer and 2 products
+    order_resp = client.post("/api/tables/ORDERS/records", json={
+        "customer_id": 101,
+        "status": "PENDING",
+        "notes": "Multi-product order test",
+        "items": [
+            {"product_id": 201, "quantity": 2},
+            {"product_id": 203, "quantity": 1}
+        ]
+    })
+    assert order_resp.status_code == 200
+    order_pk = order_resp.json()["record_pk"]
+    assert order_resp.json()["record"]["total_amount"] == (4250.0 * 2 + 2850.0)
+
+    # 2. Verify ORDER_ITEMS has both products for this order
+    items = client.get("/api/tables/ORDER_ITEMS/records").json()
+    order_items = [it for it in items if str(it["order_id"]) == str(order_pk)]
+    assert len(order_items) == 2
+
+    # 3. Referencing key check: inserting ORDER_ITEM with non-existent product fails (ORA-02291)
+    bad_item = client.post("/api/tables/ORDER_ITEMS/records", json={
+        "order_id": int(order_pk),
+        "product_id": 99999,
+        "quantity": 1
+    })
+    assert bad_item.status_code == 400
+    assert "ORA-02291" in bad_item.json()["detail"]
+
+    # 4. Referenced key check: deleting a product referenced in ORDER_ITEMS fails (ORA-02292)
+    del_prod = client.delete("/api/tables/PRODUCTS/records/201")
+    assert del_prod.status_code == 400
+    assert "ORA-02292" in del_prod.json()["detail"]
+
+    # 5. Cascade delete: deleting the order removes its ORDER_ITEMS
+    del_ord = client.delete(f"/api/tables/ORDERS/records/{order_pk}")
+    assert del_ord.status_code == 200
+    items_after = client.get("/api/tables/ORDER_ITEMS/records").json()
+    assert not any(str(it["order_id"]) == str(order_pk) for it in items_after)

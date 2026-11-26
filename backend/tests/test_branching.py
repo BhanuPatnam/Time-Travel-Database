@@ -452,3 +452,36 @@ def test_15_conflict_resolution_and_referential_integrity():
     assert res_data["status"] == "SUCCESS"
     assert res_data["merge_commit_id"] is not None
 
+def test_16_revert_branch_to_earlier_commit():
+    """16. Going back in a branch: non-destructive revert to an earlier commit."""
+    b = client.post("/api/branches", json={"branch_name": "exp/revert-demo"}).json()
+    init_commit_id = b["head_commit_id"]
+
+    # Commit 1: update credit limit of customer 101 to 99000
+    c1 = client.post("/api/branches/exp/revert-demo/commits", json={
+        "commit_message": "Increase 101 credit to 99k",
+        "changes": [{
+            "table_name": "CUSTOMERS",
+            "record_id": "101",
+            "operation_type": "UPDATE",
+            "after_values": {"credit_limit": 99000.0}
+        }]
+    }).json()
+    assert c1["commit_id"]
+
+    # Verify branch state is 99000
+    s1 = client.get("/api/branches/exp/revert-demo/state", params={"table_name": "CUSTOMERS"}).json()
+    c101_s1 = next(r for r in s1["records"] if str(r.get("customer_id")) == "101")
+    assert c101_s1["credit_limit"] == 99000.0
+
+    # Revert branch back to initial commit
+    rev = client.post(f"/api/branches/exp/revert-demo/revert/{init_commit_id}")
+    assert rev.status_code == 200
+    rev_data = rev.json()
+    assert rev_data["changeset_count"] == 1
+
+    # Verify branch state is back to 75000.0
+    s2 = client.get("/api/branches/exp/revert-demo/state", params={"table_name": "CUSTOMERS"}).json()
+    c101_s2 = next(r for r in s2["records"] if str(r.get("customer_id")) == "101")
+    assert c101_s2["credit_limit"] == 75000.0
+

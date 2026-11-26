@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   GitBranch, GitCommit, GitMerge, GitCompare, Plus, Trash2, 
-  Search, Check, AlertCircle, ArrowRight, RefreshCw, ZoomIn, 
-  ZoomOut, Maximize2, Shield, Eye, Layers, User, Calendar, 
-  Tag, Clock, Database, ChevronRight, X, AlertTriangle, CheckCircle2
+  Search, AlertCircle, ZoomIn, ZoomOut, Maximize2, Shield, 
+  Layers, User, Clock, Database, ChevronRight, X, AlertTriangle, 
+  CheckCircle2, Edit3, Eye, RotateCcw, ArrowLeft, ArrowRight
 } from 'lucide-react';
 import apiService from '../services/api';
 
@@ -18,15 +18,28 @@ const BRANCH_COLORS = [
   '#475569'  // Archive (Slate)
 ];
 
+function getRowPk(row, tableName) {
+  const t = (tableName || row?._table || '').toUpperCase();
+  if (t === 'CUSTOMERS') return String(row.customer_id ?? '');
+  if (t === 'PRODUCTS') return String(row.product_id ?? '');
+  if (t === 'ORDERS') return String(row.order_id ?? '');
+  if (t === 'ORDER_ITEMS') return String(row.item_id ?? '');
+  return String(row.customer_id ?? row.product_id ?? row.order_id ?? row.item_id ?? '');
+}
+
 export default function BranchingPage() {
   // Primary state
   const [branches, setBranches] = useState([]);
   const [activeBranch, setActiveBranch] = useState('main');
+  const [branchBackStack, setBranchBackStack] = useState([]);
+  const [branchForwardStack, setBranchForwardStack] = useState([]);
   const [commits, setCommits] = useState([]);
   const [selectedCommit, setSelectedCommit] = useState(null);
   const [timelineData, setTimelineData] = useState({ branches: [], nodes: [], links: [] });
   const [branchState, setBranchState] = useState([]);
+  const [viewingCommitId, setViewingCommitId] = useState(null);
   const [activeStateTable, setActiveStateTable] = useState('CUSTOMERS');
+  const [stateSearch, setStateSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -64,17 +77,23 @@ export default function BranchingPage() {
     operation_type: 'UPDATE',
     commit_message: '',
     author: 'developer',
+    before_values: null,
     // Customer fields
     name: 'Acme Industrial Corp',
     email: 'procurement@acmeind.com',
-    phone: '+1-555-0101',
+    phone: '+1-555-0999',
     status: 'ACTIVE',
     credit_limit: 75000.0,
     // Product fields
     sku: 'SKU-SRV-01',
     category: 'Hardware',
     unit_price: 4250.0,
-    stock_quantity: 35
+    stock_quantity: 35,
+    // Order fields
+    customer_id: 101,
+    order_status: 'PROCESSING',
+    total_amount: 21000.0,
+    notes: ''
   });
 
   const [compareForm, setCompareForm] = useState({
@@ -99,7 +118,8 @@ export default function BranchingPage() {
   // 2. When active branch changes
   useEffect(() => {
     if (activeBranch) {
-      loadBranchDetails(activeBranch);
+      setViewingCommitId(null);
+      loadBranchDetails(activeBranch, null, null);
     }
   }, [activeBranch]);
 
@@ -115,7 +135,6 @@ export default function BranchingPage() {
 
   const loadBranches = async () => {
     try {
-      setLoading(true);
       const data = await apiService.getBranches();
       setBranches(data);
       if (!data.find(b => b.branch_name === activeBranch) && data.length > 0) {
@@ -123,30 +142,194 @@ export default function BranchingPage() {
       }
     } catch (err) {
       showToast(err?.response?.data?.detail || err.message, true);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const loadBranchDetails = async (bName) => {
+  const loadBranchDetails = async (bName, preferredCommitId = null, targetStateCommitId = null) => {
     try {
       const [commitsData, timeline, stateData] = await Promise.all([
         apiService.getBranchCommits(bName),
         apiService.getBranchTimeline(bName),
-        apiService.getBranchState(bName, '__ALL__')
+        apiService.getBranchState(bName, '__ALL__', targetStateCommitId)
       ]);
       setCommits(commitsData);
       setTimelineData(timeline);
       setBranchState(stateData.records || []);
-      if (commitsData.length > 0 && !selectedCommit) {
-        setSelectedCommit(commitsData[0]);
+      setViewingCommitId(targetStateCommitId);
+
+      if (commitsData.length > 0) {
+        if (preferredCommitId) {
+          const found = commitsData.find(c => c.commit_id === preferredCommitId);
+          setSelectedCommit(found || commitsData[0]);
+        } else {
+          setSelectedCommit(commitsData[0]);
+        }
+      } else {
+        setSelectedCommit(null);
       }
     } catch (err) {
       showToast(err?.response?.data?.detail || err.message, true);
     }
   };
 
+  // Track which records were modified or inserted on this branch
+  const branchChangeMap = useMemo(() => {
+    const map = {};
+    // Process oldest to newest so latest op wins
+    const ordered = [...commits].reverse();
+    for (const c of ordered) {
+      for (const cs of (c.changes || [])) {
+        const key = `${cs.table_name}:${cs.record_id}`;
+        map[key] = cs.operation_type;
+      }
+    }
+    return map;
+  }, [commits]);
+
+  // Helper to populate Commit Modal from a row in current branchState
+  const populateCommitFormFromRow = (tableName, recordId, operationType = 'UPDATE', customRow = null) => {
+    const tbl = tableName.toUpperCase();
+    const row = customRow || branchState.find(
+      r => (r._table || 'CUSTOMERS') === tbl && getRowPk(r, tbl) === String(recordId)
+    );
+
+    if (row) {
+      const cleanBefore = { ...row };
+      delete cleanBefore._table;
+      setCommitForm(prev => ({
+        ...prev,
+        table_name: tbl,
+        record_id: String(recordId),
+        operation_type: operationType,
+        before_values: cleanBefore,
+        // Customer
+        name: row.name ?? prev.name,
+        email: row.email ?? prev.email,
+        phone: row.phone ?? '+1-555-0100',
+        status: row.status ?? 'ACTIVE',
+        credit_limit: row.credit_limit ?? 50000,
+        // Product
+        sku: row.sku ?? `SKU-${recordId}`,
+        category: row.category ?? 'Hardware',
+        unit_price: row.unit_price ?? 1000,
+        stock_quantity: row.stock_quantity ?? 25,
+        // Order
+        customer_id: row.customer_id ?? 101,
+        order_status: row.status ?? 'PROCESSING',
+        total_amount: row.total_amount ?? 1500,
+        notes: row.notes ?? ''
+      }));
+    } else {
+      setCommitForm(prev => ({
+        ...prev,
+        table_name: tbl,
+        record_id: String(recordId),
+        operation_type: operationType,
+        before_values: null
+      }));
+    }
+  };
+
+  const openCommitModalForRow = (row, opType = 'UPDATE') => {
+    const tbl = (row?._table || activeStateTable === '__ALL__' ? (row?._table || 'CUSTOMERS') : activeStateTable).toUpperCase();
+    const pk = row ? getRowPk(row, tbl) : String(tbl === 'CUSTOMERS' ? 151 : tbl === 'PRODUCTS' ? 251 : 551);
+    populateCommitFormFromRow(tbl, pk, opType, row);
+    setCommitForm(prev => ({
+      ...prev,
+      commit_message: opType === 'DELETE'
+        ? `Delete ${tbl} #${pk}`
+        : opType === 'INSERT'
+        ? `Insert new ${tbl} #${pk}`
+        : `Update ${tbl} #${pk}`
+    }));
+    setShowCommitModal(true);
+  };
+
   // --- ACTIONS ---
+
+  const switchBranch = (targetBranch) => {
+    if (!targetBranch || targetBranch === activeBranch) return;
+    setBranchBackStack(prev => [...prev, activeBranch]);
+    setBranchForwardStack([]);
+    setActiveBranch(targetBranch);
+  };
+
+  const handleBranchBack = () => {
+    if (branchBackStack.length > 0) {
+      const prevBranch = branchBackStack[branchBackStack.length - 1];
+      setBranchBackStack(prev => prev.slice(0, -1));
+      setBranchForwardStack(prev => [activeBranch, ...prev]);
+      setActiveBranch(prevBranch);
+      return;
+    }
+    const curBranchObj = branches.find(b => b.branch_name === activeBranch);
+    const parentTarget = curBranchObj?.parent_name || (activeBranch !== 'main' ? 'main' : null);
+    if (parentTarget) {
+      setBranchForwardStack(prev => [activeBranch, ...prev]);
+      setActiveBranch(parentTarget);
+    }
+  };
+
+  const handleBranchForward = () => {
+    if (branchForwardStack.length === 0) return;
+    const nextBranch = branchForwardStack[0];
+    setBranchForwardStack(prev => prev.slice(1));
+    setBranchBackStack(prev => [...prev, activeBranch]);
+    setActiveBranch(nextBranch);
+  };
+
+  const handleInspectCommitDb = async (commitObj) => {
+    if (!commitObj) return;
+    const targetBranch = commitObj.branch_name || activeBranch;
+    try {
+      setLoading(true);
+      if (targetBranch !== activeBranch) {
+        setActiveBranch(targetBranch);
+      }
+      const stateData = await apiService.getBranchState(targetBranch, '__ALL__', commitObj.commit_id);
+      setBranchState(stateData.records || []);
+      setViewingCommitId(commitObj.commit_id);
+      setCenterView('state');
+      showToast(`Loaded branch database snapshot at commit ${commitObj.commit_id}`);
+    } catch (err) {
+      showToast(err?.response?.data?.detail || err.message, true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStateCommitSelect = async (commitIdOrHead) => {
+    const cid = commitIdOrHead === '__HEAD__' ? null : commitIdOrHead;
+    try {
+      setLoading(true);
+      const stateData = await apiService.getBranchState(activeBranch, '__ALL__', cid);
+      setBranchState(stateData.records || []);
+      setViewingCommitId(cid);
+    } catch (err) {
+      showToast(err?.response?.data?.detail || err.message, true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRevertToCommit = async (targetCommitId) => {
+    if (!window.confirm(`Restore branch '${activeBranch}' back to commit ${targetCommitId}? This creates a new revert commit while preserving full history.`)) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await apiService.revertBranchToCommit(activeBranch, targetCommitId, 'developer');
+      showToast(`Branch '${activeBranch}' restored to ${targetCommitId} (commit ${res.commit_id})`);
+      await Promise.all([
+        loadBranches(),
+        loadBranchDetails(activeBranch, res.commit_id, null)
+      ]);
+    } catch (err) {
+      showToast(err?.response?.data?.detail || err.message, true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCreateBranch = async (e) => {
     e.preventDefault();
@@ -203,28 +386,43 @@ export default function BranchingPage() {
     }
     try {
       setLoading(true);
-      const afterValues = commitForm.table_name === 'CUSTOMERS' ? {
-        customer_id: Number(commitForm.record_id),
-        name: commitForm.name,
-        email: commitForm.email,
-        phone: commitForm.phone,
-        status: commitForm.status,
-        credit_limit: parseFloat(commitForm.credit_limit)
-      } : {
-        product_id: Number(commitForm.record_id),
-        sku: commitForm.sku,
-        name: commitForm.name,
-        category: commitForm.category,
-        unit_price: parseFloat(commitForm.unit_price),
-        stock_quantity: parseInt(commitForm.stock_quantity, 10)
-      };
+      let afterValues = null;
+      if (commitForm.operation_type !== 'DELETE') {
+        if (commitForm.table_name === 'CUSTOMERS') {
+          afterValues = {
+            customer_id: Number(commitForm.record_id),
+            name: commitForm.name,
+            email: commitForm.email,
+            phone: commitForm.phone,
+            status: commitForm.status,
+            credit_limit: parseFloat(commitForm.credit_limit)
+          };
+        } else if (commitForm.table_name === 'PRODUCTS') {
+          afterValues = {
+            product_id: Number(commitForm.record_id),
+            sku: commitForm.sku,
+            name: commitForm.name,
+            category: commitForm.category,
+            unit_price: parseFloat(commitForm.unit_price),
+            stock_quantity: parseInt(commitForm.stock_quantity, 10)
+          };
+        } else if (commitForm.table_name === 'ORDERS') {
+          afterValues = {
+            order_id: Number(commitForm.record_id),
+            customer_id: Number(commitForm.customer_id),
+            status: commitForm.order_status,
+            total_amount: parseFloat(commitForm.total_amount),
+            notes: commitForm.notes
+          };
+        }
+      }
 
       const changeItem = {
         table_name: commitForm.table_name,
         record_id: String(commitForm.record_id),
         operation_type: commitForm.operation_type,
-        after_values: commitForm.operation_type === 'DELETE' ? null : afterValues,
-        before_values: null
+        after_values: afterValues,
+        before_values: commitForm.before_values
       };
 
       const res = await apiService.createBranchCommit(activeBranch, {
@@ -236,7 +434,11 @@ export default function BranchingPage() {
       showToast(`Commit '${res.commit_id}' recorded on branch '${activeBranch}'!`);
       setShowCommitModal(false);
       setCommitForm(prev => ({ ...prev, commit_message: '' }));
-      await loadBranchDetails(activeBranch);
+      // Refresh BOTH branch list (commit counts) and branch details (selectedCommit = new commit)
+      await Promise.all([
+        loadBranches(),
+        loadBranchDetails(activeBranch, res.commit_id, null)
+      ]);
     } catch (err) {
       showToast(err?.response?.data?.detail || err.message, true);
     } finally {
@@ -276,8 +478,10 @@ export default function BranchingPage() {
 
       if (res.status === 'SUCCESS') {
         showToast(`Merged successfully! Commit: ${res.merge_commit_id}`);
-        await loadBranches();
-        await loadBranchDetails(activeBranch);
+        await Promise.all([
+          loadBranches(),
+          loadBranchDetails(activeBranch, res.merge_commit_id, null)
+        ]);
       } else if (res.status === 'CONFLICT') {
         const initialResolutions = {};
         res.conflicts.forEach(c => {
@@ -317,8 +521,10 @@ export default function BranchingPage() {
       showToast(`Conflicts resolved! Merge Commit: ${res.merge_commit_id}`);
       setShowMergeModal(false);
       setMergeResult(null);
-      await loadBranches();
-      await loadBranchDetails(activeBranch);
+      await Promise.all([
+        loadBranches(),
+        loadBranchDetails(activeBranch, res.merge_commit_id, null)
+      ]);
     } catch (err) {
       showToast(err?.response?.data?.detail || err.message, true);
     } finally {
@@ -342,7 +548,6 @@ export default function BranchingPage() {
   const nodes = timelineData.nodes || [];
   const links = timelineData.links || [];
 
-  // Graph geometry
   const X_SPACING = 140;
   const Y_SPACING = 60;
   const PADDING_X = 70;
@@ -363,6 +568,18 @@ export default function BranchingPage() {
     b.branch_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const displayedRows = useMemo(() => {
+    return branchState.filter(r => {
+      const tbl = r._table || 'CUSTOMERS';
+      if (activeStateTable !== '__ALL__' && tbl !== activeStateTable) return false;
+      if (stateSearch.trim()) {
+        const q = stateSearch.toLowerCase();
+        return Object.values(r).some(v => String(v).toLowerCase().includes(q));
+      }
+      return true;
+    });
+  }, [branchState, activeStateTable, stateSearch]);
+
   return (
     <div className="space-y-6">
       {/* 1. TOP PAGE HEADER */}
@@ -381,12 +598,43 @@ export default function BranchingPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Active Branch Pill & Selector */}
+          {(() => {
+            const curBranchObj = branches.find(b => b.branch_name === activeBranch);
+            const fallbackParent = curBranchObj?.parent_name || (activeBranch !== 'main' ? 'main' : null);
+            const backTarget = branchBackStack.length > 0 ? branchBackStack[branchBackStack.length - 1] : fallbackParent;
+            const forwardTarget = branchForwardStack.length > 0 ? branchForwardStack[0] : null;
+            if (!backTarget && !forwardTarget) return null;
+            return (
+              <div className="flex items-center space-x-1">
+                {backTarget && (
+                  <button
+                    onClick={handleBranchBack}
+                    className="flex items-center space-x-1 px-2.5 py-1.5 bg-[#FFFFFF] hover:bg-[#F7F8FA] text-[#4263A5] rounded-lg text-xs font-semibold border border-[#D0E0F6] transition cursor-pointer shadow-xs"
+                    title={`Go back to '${backTarget}'`}
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back ({backTarget})</span>
+                  </button>
+                )}
+                {forwardTarget && (
+                  <button
+                    onClick={handleBranchForward}
+                    className="flex items-center space-x-1 px-2.5 py-1.5 bg-[#FFFFFF] hover:bg-[#F7F8FA] text-[#0D8A5B] rounded-lg text-xs font-semibold border border-[#CEEAD6] transition cursor-pointer shadow-xs"
+                    title={`Go forward to '${forwardTarget}'`}
+                  >
+                    <span>Forward ({forwardTarget})</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="flex items-center space-x-2 px-3 py-1.5 bg-[#FFFFFF] rounded-lg border border-[#E2E6EC] shadow-xs">
             <GitBranch className="w-3.5 h-3.5 text-[#4263A5]" />
             <select
               value={activeBranch}
-              onChange={(e) => setActiveBranch(e.target.value)}
+              onChange={(e) => switchBranch(e.target.value)}
               className="bg-transparent text-xs font-semibold text-[#202833] focus:outline-none cursor-pointer pr-1"
             >
               {branches.map(b => (
@@ -409,7 +657,12 @@ export default function BranchingPage() {
           </button>
 
           <button
-            onClick={() => setShowCommitModal(true)}
+            onClick={() => {
+              const defaultTbl = activeStateTable === '__ALL__' ? 'CUSTOMERS' : activeStateTable;
+              const defaultPk = defaultTbl === 'CUSTOMERS' ? '101' : defaultTbl === 'PRODUCTS' ? '201' : '501';
+              populateCommitFormFromRow(defaultTbl, defaultPk, 'UPDATE');
+              setShowCommitModal(true);
+            }}
             className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#FFFFFF] hover:bg-[#F7F8FA] text-[#202833] rounded-lg text-xs font-semibold border border-[#E2E6EC] transition cursor-pointer shadow-xs"
           >
             <GitCommit className="w-3.5 h-3.5 text-[#D97706]" />
@@ -419,6 +672,7 @@ export default function BranchingPage() {
           <button
             onClick={() => {
               setCompareForm({ base_branch: 'main', compare_branch: activeBranch });
+              setCompareResult(null);
               setShowCompareModal(true);
             }}
             className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#FFFFFF] hover:bg-[#F7F8FA] text-[#202833] rounded-lg text-xs font-semibold border border-[#E2E6EC] transition cursor-pointer shadow-xs"
@@ -490,10 +744,11 @@ export default function BranchingPage() {
           <div className="space-y-1.5 max-h-[460px] overflow-y-auto pr-1">
             {filteredBranches.map(b => {
               const isSelected = b.branch_name === activeBranch;
+              const displayCommitCount = isSelected ? commits.length : b.commit_count;
               return (
                 <div
                   key={b.branch_id}
-                  onClick={() => setActiveBranch(b.branch_name)}
+                  onClick={() => switchBranch(b.branch_name)}
                   className={`group flex items-center justify-between px-3 py-2 rounded-lg text-xs transition cursor-pointer border ${
                     isSelected
                       ? 'bg-[#EDF3FC] border-[#D0E0F6] text-[#4263A5] font-semibold shadow-xs'
@@ -511,7 +766,9 @@ export default function BranchingPage() {
                   </div>
 
                   <div className="flex items-center space-x-1.5 shrink-0">
-                    <span className="text-[11px] font-mono text-[#687386]">{b.commit_count} commits</span>
+                    <span className="text-[11px] font-mono text-[#687386]">
+                      {displayCommitCount} {displayCommitCount === 1 ? 'commit' : 'commits'}
+                    </span>
                     {b.is_default !== 'Y' && (
                       <button
                         onClick={(e) => {
@@ -530,7 +787,6 @@ export default function BranchingPage() {
             })}
           </div>
 
-          {/* Left Footer Summary */}
           <div className="pt-3 border-t border-[#E2E6EC] text-[11px] text-[#687386] space-y-1">
             <div className="flex justify-between items-center">
               <span>Active Workspace:</span>
@@ -547,7 +803,7 @@ export default function BranchingPage() {
         <div className="lg:col-span-6 content-panel flex flex-col bg-[#FFFFFF] border border-[#E2E6EC] rounded-xl shadow-xs overflow-hidden">
           
           {/* Subheader: View Selector & Tooling */}
-          <div className="flex flex-wrap items-center justify-between px-4 py-2.5 border-b border-[#E2E6EC] bg-[#F7F8FA]">
+          <div className="flex flex-wrap items-center justify-between px-4 py-2.5 border-b border-[#E2E6EC] bg-[#F7F8FA] gap-2">
             <div className="flex items-center space-x-1 bg-[#FFFFFF] p-0.5 rounded-lg border border-[#E2E6EC] shadow-xs text-xs">
               <button
                 onClick={() => setCenterView('graph')}
@@ -571,11 +827,10 @@ export default function BranchingPage() {
                   centerView === 'state' ? 'bg-[#4263A5] text-white shadow-xs' : 'text-[#687386] hover:text-[#202833]'
                 }`}
               >
-                Branch Rows ({branchState.length})
+                Branch Database ({branchState.length})
               </button>
             </div>
 
-            {/* View specific controls */}
             {centerView === 'graph' && (
               <div className="flex items-center space-x-1 text-[#687386]">
                 <button
@@ -604,23 +859,31 @@ export default function BranchingPage() {
 
             {centerView === 'state' && (
               <div className="flex items-center space-x-2">
-                <span className="text-xs text-[#687386]">Table:</span>
                 <select
                   value={activeStateTable}
                   onChange={(e) => setActiveStateTable(e.target.value)}
-                  className="bg-[#FFFFFF] text-xs text-[#202833] font-medium rounded px-2 py-1 border border-[#E2E6EC] focus:border-[#4263A5] outline-none"
+                  className="bg-[#FFFFFF] text-xs text-[#202833] font-medium rounded px-2 py-1 border border-[#E2E6EC] focus:border-[#4263A5] outline-none cursor-pointer"
                 >
                   <option value="CUSTOMERS">CUSTOMERS</option>
                   <option value="PRODUCTS">PRODUCTS</option>
                   <option value="ORDERS">ORDERS</option>
                   <option value="__ALL__">ALL TABLES</option>
                 </select>
+                {!viewingCommitId && (
+                  <button
+                    onClick={() => openCommitModalForRow(null, 'INSERT')}
+                    className="flex items-center space-x-1 px-2.5 py-1 bg-[#4263A5] hover:bg-[#345188] text-white rounded text-xs font-semibold cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Insert Row</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
 
           {/* VIEW CONTENT */}
-          <div className="min-h-[460px] max-h-[520px] overflow-auto relative bg-[#FAFAFC]">
+          <div className="min-h-[460px] max-h-[560px] overflow-auto relative bg-[#FAFAFC]">
             
             {/* VIEW A: INTERACTIVE SVG COMMIT GRAPH */}
             {centerView === 'graph' && (
@@ -686,7 +949,6 @@ export default function BranchingPage() {
                     const isMerge = link.type === 'merge';
                     const strokeColor = isMerge ? '#0D8A5B' : (target.color || '#4263A5');
 
-                    // Cubic Bezier curved path
                     const dx = target.x - source.x;
                     const pathData = `
                       M ${source.x} ${source.y}
@@ -724,7 +986,6 @@ export default function BranchingPage() {
                         }}
                         className="cursor-pointer group"
                       >
-                        {/* Outer Glow on selection */}
                         {isSelected && (
                           <circle
                             r="15"
@@ -736,7 +997,6 @@ export default function BranchingPage() {
                           />
                         )}
 
-                        {/* Node Circle */}
                         <circle
                           r={isMerge ? "9" : "7"}
                           fill="#FFFFFF"
@@ -749,7 +1009,6 @@ export default function BranchingPage() {
                           <circle r="3.5" fill="#0D8A5B" />
                         )}
 
-                        {/* Commit ID Label */}
                         <text
                           y="-13"
                           textAnchor="middle"
@@ -761,7 +1020,6 @@ export default function BranchingPage() {
                           {n.commit_id}
                         </text>
 
-                        {/* Commit Message Label */}
                         <text
                           y="22"
                           textAnchor="middle"
@@ -828,64 +1086,254 @@ export default function BranchingPage() {
                         </div>
                       </div>
 
-                      <ChevronRight className="w-4 h-4 text-[#687386]" />
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedCommit(c);
+                            handleInspectCommitDb(c);
+                          }}
+                          className="px-2 py-1 rounded bg-[#FFFFFF] hover:bg-[#EDF3FC] border border-[#E2E6EC] text-[10px] font-semibold text-[#4263A5] flex items-center space-x-1 cursor-pointer"
+                          title="View database state at this commit"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>View DB</span>
+                        </button>
+                        <ChevronRight className="w-4 h-4 text-[#687386]" />
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
 
-            {/* VIEW C: BRANCH STATE ROW EXPLORER */}
+            {/* VIEW C: BRANCH DATABASE EXPLORER (AT HEAD OR PARTICULAR COMMIT) */}
             {centerView === 'state' && (
-              <div className="p-4">
-                <div className="rounded-lg border border-[#E2E6EC] overflow-hidden bg-[#FFFFFF] shadow-xs">
+              <div className="p-4 space-y-3">
+                {/* Snapshot Commit Selector & Search Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-[#FFFFFF] p-2.5 rounded-lg border border-[#E2E6EC]">
+                  <div className="flex items-center space-x-2 text-xs">
+                    <Database className="w-3.5 h-3.5 text-[#4263A5]" />
+                    <span className="font-semibold text-[#202833]">Snapshot:</span>
+                    <select
+                      value={viewingCommitId || '__HEAD__'}
+                      onChange={(e) => handleStateCommitSelect(e.target.value)}
+                      className="px-2.5 py-1 bg-[#F7F8FA] border border-[#E2E6EC] rounded text-xs font-mono text-[#202833] focus:border-[#4263A5] outline-none cursor-pointer"
+                    >
+                      <option value="__HEAD__">HEAD (Latest on {activeBranch})</option>
+                      {commits.map(c => (
+                        <option key={c.commit_id} value={c.commit_id}>
+                          {c.commit_id} — {c.commit_message.substring(0, 32)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="relative flex-1 min-w-[160px] max-w-[220px]">
+                    <Search className="w-3 h-3 text-[#687386] absolute left-2.5 top-2" />
+                    <input
+                      type="text"
+                      placeholder="Search rows..."
+                      value={stateSearch}
+                      onChange={(e) => setStateSearch(e.target.value)}
+                      className="w-full pl-7 pr-2.5 py-1 bg-[#F7F8FA] border border-[#E2E6EC] rounded text-xs text-[#202833] outline-none focus:border-[#4263A5]"
+                    />
+                  </div>
+                </div>
+
+                {/* Historical Commit Banner with Back / Forward Commit Stepper */}
+                {viewingCommitId && (() => {
+                  const idx = commits.findIndex(c => c.commit_id === viewingCommitId);
+                  const olderCommit = idx >= 0 && idx < commits.length - 1 ? commits[idx + 1] : null;
+                  const newerCommit = idx > 0 ? commits[idx - 1] : null;
+                  return (
+                    <div className="px-3 py-2 bg-[#FEF3D6] border border-[#FEE3A2] rounded-lg flex flex-wrap items-center justify-between gap-2 text-xs text-[#B06000]">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          Viewing snapshot at <strong className="font-mono">{viewingCommitId}</strong> (read-only).
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-1.5">
+                        {olderCommit && (
+                          <button
+                            onClick={() => handleStateCommitSelect(olderCommit.commit_id)}
+                            className="flex items-center space-x-1 px-2 py-0.5 bg-[#FFFFFF] border border-[#FEE3A2] rounded text-[11px] font-semibold text-[#B06000] hover:bg-[#FFFBEB] cursor-pointer"
+                            title={`Go back to older commit ${olderCommit.commit_id}`}
+                          >
+                            <ArrowLeft className="w-3 h-3" />
+                            <span>Older ({olderCommit.commit_id})</span>
+                          </button>
+                        )}
+                        {newerCommit && (
+                          <button
+                            onClick={() => handleStateCommitSelect(newerCommit.commit_id)}
+                            className="flex items-center space-x-1 px-2 py-0.5 bg-[#FFFFFF] border border-[#CEEAD6] rounded text-[11px] font-semibold text-[#0D8A5B] hover:bg-[#E6F4EA] cursor-pointer"
+                            title={`Go forward to newer commit ${newerCommit.commit_id}`}
+                          >
+                            <span>Newer ({newerCommit.commit_id})</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleStateCommitSelect('__HEAD__')}
+                          className="flex items-center space-x-1 px-2 py-0.5 bg-[#FFFFFF] border border-[#FEE3A2] rounded text-[11px] font-semibold text-[#4263A5] hover:bg-[#EDF3FC] cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>HEAD</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Table Data Grid */}
+                <div className="rounded-lg border border-[#E2E6EC] overflow-x-auto bg-[#FFFFFF] shadow-xs">
                   <table className="w-full text-left text-xs text-[#202833]">
                     <thead className="bg-[#F7F8FA] text-[11px] uppercase tracking-wider text-[#687386] border-b border-[#E2E6EC]">
                       <tr>
-                        <th className="px-3.5 py-2.5 font-semibold">Workspace</th>
-                        <th className="px-3.5 py-2.5 font-semibold">Key</th>
-                        <th className="px-3.5 py-2.5 font-semibold">Name / Sku</th>
-                        <th className="px-3.5 py-2.5 font-semibold">Status / Price</th>
-                        <th className="px-3.5 py-2.5 font-semibold">Credit / Stock</th>
-                        <th className="px-3.5 py-2.5 font-semibold">Relation</th>
+                        <th className="px-3 py-2.5 font-semibold">Branch State</th>
+                        <th className="px-3 py-2.5 font-semibold">PK</th>
+                        {activeStateTable === 'CUSTOMERS' && (
+                          <>
+                            <th className="px-3 py-2.5 font-semibold">Name</th>
+                            <th className="px-3 py-2.5 font-semibold">Email</th>
+                            <th className="px-3 py-2.5 font-semibold">Status</th>
+                            <th className="px-3 py-2.5 font-semibold">Credit Limit</th>
+                          </>
+                        )}
+                        {activeStateTable === 'PRODUCTS' && (
+                          <>
+                            <th className="px-3 py-2.5 font-semibold">SKU</th>
+                            <th className="px-3 py-2.5 font-semibold">Name</th>
+                            <th className="px-3 py-2.5 font-semibold">Category</th>
+                            <th className="px-3 py-2.5 font-semibold">Price / Stock</th>
+                          </>
+                        )}
+                        {activeStateTable === 'ORDERS' && (
+                          <>
+                            <th className="px-3 py-2.5 font-semibold">Customer</th>
+                            <th className="px-3 py-2.5 font-semibold">Status</th>
+                            <th className="px-3 py-2.5 font-semibold">Total</th>
+                            <th className="px-3 py-2.5 font-semibold">Notes</th>
+                          </>
+                        )}
+                        {activeStateTable === '__ALL__' && (
+                          <>
+                            <th className="px-3 py-2.5 font-semibold">Table</th>
+                            <th className="px-3 py-2.5 font-semibold">Summary</th>
+                            <th className="px-3 py-2.5 font-semibold">Value / Status</th>
+                          </>
+                        )}
+                        {!viewingCommitId && <th className="px-3 py-2.5 font-semibold text-right">Actions</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E2E6EC]">
-                      {branchState
-                        .filter(r => activeStateTable === '__ALL__' || (r._table || 'CUSTOMERS') === activeStateTable)
-                        .map((row, idx) => {
-                          const pk = row.customer_id || row.product_id || row.order_id || row.item_id || idx;
-                          return (
-                            <tr key={idx} className="hover:bg-[#F9FAFB]">
-                              <td className="px-3.5 py-2">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#EDF3FC] text-[#4263A5] border border-[#D0E0F6]">
-                                  Branch Isolated
+                      {displayedRows.map((row, idx) => {
+                        const tbl = row._table || 'CUSTOMERS';
+                        const pk = getRowPk(row, tbl);
+                        const branchOp = branchChangeMap[`${tbl}:${pk}`];
+
+                        return (
+                          <tr key={`${tbl}-${pk}-${idx}`} className="hover:bg-[#F9FAFB]">
+                            <td className="px-3 py-2">
+                              {branchOp === 'INSERT' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#E6F4EA] text-[#0D8A5B] border border-[#CEEAD6]">
+                                  Inserted on Branch
                                 </span>
-                              </td>
-                              <td className="px-3.5 py-2 font-mono font-bold text-[#202833]">{pk}</td>
-                              <td className="px-3.5 py-2 font-medium">{row.name || row.sku || '-'}</td>
-                              <td className="px-3.5 py-2 font-mono">
-                                {row.status ? (
+                              ) : branchOp === 'UPDATE' ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#FEF3D6] text-[#B06000] border border-[#FEE3A2]">
+                                  Modified on Branch
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#F0F2F5] text-[#687386] border border-[#E2E6EC]">
+                                  Inherited
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 font-mono font-bold text-[#202833]">{pk}</td>
+
+                            {activeStateTable === 'CUSTOMERS' && (
+                              <>
+                                <td className="px-3 py-2 font-medium">{row.name}</td>
+                                <td className="px-3 py-2 text-[#687386]">{row.email}</td>
+                                <td className="px-3 py-2">
                                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                                    row.status === 'ACTIVE' ? 'bg-[#E6F4EA] text-[#0D8A5B] border border-[#CEEAD6]' : 'bg-[#FCE8E6] text-[#C5221F] border border-[#FAD2CF]'
+                                    row.status === 'ACTIVE' ? 'bg-[#E6F4EA] text-[#0D8A5B]' : 'bg-[#FCE8E6] text-[#C5221F]'
                                   }`}>
                                     {row.status}
                                   </span>
-                                ) : (
-                                  row.unit_price ? `$${row.unit_price}` : '-'
-                                )}
+                                </td>
+                                <td className="px-3 py-2 font-mono font-semibold">
+                                  ${Number(row.credit_limit || 0).toLocaleString()}
+                                </td>
+                              </>
+                            )}
+
+                            {activeStateTable === 'PRODUCTS' && (
+                              <>
+                                <td className="px-3 py-2 font-mono text-[#4263A5]">{row.sku}</td>
+                                <td className="px-3 py-2 font-medium">{row.name}</td>
+                                <td className="px-3 py-2 text-[#687386]">{row.category}</td>
+                                <td className="px-3 py-2 font-mono">
+                                  ${Number(row.unit_price || 0).toLocaleString()} · <span className="text-[#687386]">{row.stock_quantity} qty</span>
+                                </td>
+                              </>
+                            )}
+
+                            {activeStateTable === 'ORDERS' && (
+                              <>
+                                <td className="px-3 py-2 font-mono">#{row.customer_id}</td>
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#EDF3FC] text-[#4263A5]">
+                                    {row.status}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 font-mono font-semibold">${Number(row.total_amount || 0).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-[#687386] truncate max-w-[140px]">{row.notes}</td>
+                              </>
+                            )}
+
+                            {activeStateTable === '__ALL__' && (
+                              <>
+                                <td className="px-3 py-2 font-mono font-semibold text-[#4263A5]">{tbl}</td>
+                                <td className="px-3 py-2 font-medium">{row.name || row.sku || row.notes || `Order #${pk}`}</td>
+                                <td className="px-3 py-2 font-mono text-[#687386]">
+                                  {row.credit_limit != null ? `$${Number(row.credit_limit).toLocaleString()}` :
+                                   row.unit_price != null ? `$${Number(row.unit_price).toLocaleString()}` :
+                                   row.total_amount != null ? `$${Number(row.total_amount).toLocaleString()}` : '-'}
+                                </td>
+                              </>
+                            )}
+
+                            {!viewingCommitId && (
+                              <td className="px-3 py-2 text-right whitespace-nowrap space-x-1">
+                                <button
+                                  onClick={() => openCommitModalForRow(row, 'UPDATE')}
+                                  className="p-1 rounded hover:bg-[#EDF3FC] text-[#4263A5] cursor-pointer"
+                                  title="Modify & Commit on Branch"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5 inline" />
+                                </button>
+                                <button
+                                  onClick={() => openCommitModalForRow(row, 'DELETE')}
+                                  className="p-1 rounded hover:bg-[#FCE8E6] text-[#C5221F] cursor-pointer"
+                                  title="Delete & Commit on Branch"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 inline" />
+                                </button>
                               </td>
-                              <td className="px-3.5 py-2 font-mono text-[#687386]">
-                                {row.credit_limit ? `$${row.credit_limit.toLocaleString()}` : (row.stock_quantity ?? '-')}
-                              </td>
-                              <td className="px-3.5 py-2">
-                                <span className="text-[10px] font-mono font-semibold text-[#687386]">
-                                  {row._table || 'CUSTOMERS'}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                            )}
+                          </tr>
+                        );
+                      })}
+                      {displayedRows.length === 0 && (
+                        <tr>
+                          <td colSpan="7" className="px-4 py-8 text-center text-[#687386]">
+                            No matching records found in this snapshot.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -934,6 +1382,86 @@ export default function BranchingPage() {
                 </div>
               </div>
 
+              {/* Action: View Database / Step Older-Newer / Revert or Advance / Branch */}
+              <div className="space-y-1.5">
+                {(() => {
+                  const idx = commits.findIndex(c => c.commit_id === selectedCommit.commit_id);
+                  const olderCommit = idx >= 0 && idx < commits.length - 1 ? commits[idx + 1] : null;
+                  const newerCommit = idx > 0 ? commits[idx - 1] : null;
+                  if (idx === -1) return null;
+                  return (
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        disabled={!olderCommit}
+                        onClick={() => olderCommit && setSelectedCommit(olderCommit)}
+                        className={`py-1 px-2 rounded border text-[11px] font-semibold flex items-center justify-center space-x-1 ${
+                          olderCommit
+                            ? 'bg-[#FFFFFF] hover:bg-[#F7F8FA] border-[#E2E6EC] text-[#202833] cursor-pointer'
+                            : 'bg-[#F7F8FA] border-[#E2E6EC] text-[#CBD5E1] cursor-not-allowed'
+                        }`}
+                      >
+                        <ArrowLeft className="w-3 h-3" />
+                        <span>Older</span>
+                      </button>
+                      <button
+                        disabled={!newerCommit}
+                        onClick={() => newerCommit && setSelectedCommit(newerCommit)}
+                        className={`py-1 px-2 rounded border text-[11px] font-semibold flex items-center justify-center space-x-1 ${
+                          newerCommit
+                            ? 'bg-[#FFFFFF] hover:bg-[#F7F8FA] border-[#E2E6EC] text-[#0D8A5B] cursor-pointer'
+                            : 'bg-[#F7F8FA] border-[#E2E6EC] text-[#CBD5E1] cursor-not-allowed'
+                        }`}
+                      >
+                        <span>Newer</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                <button
+                  onClick={() => handleInspectCommitDb(selectedCommit)}
+                  className="w-full py-2 px-3 bg-[#EDF3FC] hover:bg-[#DCE7F9] border border-[#D0E0F6] text-[#4263A5] rounded-lg font-semibold text-xs flex items-center justify-center space-x-1.5 cursor-pointer transition"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>View Database at {selectedCommit.commit_id}</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {commits.length > 0 && selectedCommit.commit_id !== commits[0]?.commit_id && (selectedCommit.branch_name || activeBranch) === activeBranch && (
+                    <button
+                      onClick={() => handleRevertToCommit(selectedCommit.commit_id)}
+                      disabled={loading}
+                      className="py-1.5 px-2 bg-[#FEF3D6] hover:bg-[#FDE68A] border border-[#FEE3A2] text-[#B06000] rounded-lg font-semibold text-[11px] flex items-center justify-center space-x-1 cursor-pointer transition"
+                      title="Non-destructively revert branch back to this commit"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Revert to Here</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setCreateForm(prev => ({
+                        ...prev,
+                        parent_branch_name: selectedCommit.branch_name || activeBranch,
+                        origin_type: 'COMMIT',
+                        base_commit_id: selectedCommit.commit_id
+                      }));
+                      setShowCreateModal(true);
+                    }}
+                    className={`py-1.5 px-2 bg-[#FFFFFF] hover:bg-[#F7F8FA] border border-[#E2E6EC] text-[#202833] rounded-lg font-semibold text-[11px] flex items-center justify-center space-x-1 cursor-pointer transition ${
+                      !(commits.length > 0 && selectedCommit.commit_id !== commits[0]?.commit_id && (selectedCommit.branch_name || activeBranch) === activeBranch)
+                        ? 'col-span-2'
+                        : ''
+                    }`}
+                    title="Create a new branch starting at this exact commit"
+                  >
+                    <GitBranch className="w-3 h-3 text-[#4263A5]" />
+                    <span>Branch from {selectedCommit.commit_id}</span>
+                  </button>
+                </div>
+              </div>
+
               {selectedCommit.merge_parent_commit_id && (
                 <div className="p-2 rounded bg-[#E6F4EA] border border-[#CEEAD6] text-[11px] text-[#0D8A5B] font-semibold">
                   <span>Merge Parent: </span>
@@ -948,7 +1476,7 @@ export default function BranchingPage() {
                 </span>
 
                 {selectedCommit.changes && selectedCommit.changes.length > 0 ? (
-                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                     {selectedCommit.changes.map((cs, idx) => (
                       <div key={idx} className="p-2.5 rounded-lg bg-[#F7F8FA] border border-[#E2E6EC] space-y-1.5 text-xs">
                         <div className="flex items-center justify-between text-[11px]">
@@ -971,11 +1499,33 @@ export default function BranchingPage() {
                           </div>
                         )}
 
+                        {cs.delta_values && Object.keys(cs.delta_values).length > 0 && (
+                          <div className="space-y-1 bg-[#FFFFFF] p-2 rounded border border-[#E2E6EC]">
+                            {Object.entries(cs.delta_values).map(([col, vals]) => (
+                              <div key={col} className="text-[10px] font-mono flex flex-wrap items-center gap-1">
+                                <span className="font-bold text-[#202833]">{col}:</span>
+                                <span className="text-[#C5221F] line-through">{String(vals?.old ?? 'NULL')}</span>
+                                <span className="text-[#687386]">→</span>
+                                <span className="text-[#0D8A5B] font-semibold">{String(vals?.new ?? 'NULL')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {cs.after_values && (
                           <div className="mt-1">
-                            <span className="text-[10px] text-[#687386] block">State Values:</span>
+                            <span className="text-[10px] text-[#687386] block">After State:</span>
                             <pre className="p-2 bg-[#FFFFFF] rounded text-[10px] font-mono text-[#0D8A5B] overflow-x-auto border border-[#E2E6EC]">
                               {JSON.stringify(cs.after_values, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+
+                        {cs.operation_type === 'DELETE' && cs.before_values && (
+                          <div className="mt-1">
+                            <span className="text-[10px] text-[#687386] block">Deleted Record:</span>
+                            <pre className="p-2 bg-[#FFFFFF] rounded text-[10px] font-mono text-[#C5221F] overflow-x-auto border border-[#E2E6EC]">
+                              {JSON.stringify(cs.before_values, null, 2)}
                             </pre>
                           </div>
                         )}
@@ -984,7 +1534,7 @@ export default function BranchingPage() {
                   </div>
                 ) : (
                   <div className="p-3 text-center text-[#687386] bg-[#F7F8FA] rounded-lg border border-[#E2E6EC] text-xs">
-                    Initial root checkpoint or zero mutations in this commit.
+                    Initial branch baseline commit (zero record mutations).
                   </div>
                 )}
               </div>
@@ -1039,7 +1589,7 @@ export default function BranchingPage() {
 
               <div>
                 <label className="block text-[#202833] font-semibold mb-1">Branch Origin Point</label>
-                <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="grid grid-cols-3 gap-2 mb-2">
                   <button
                     type="button"
                     onClick={() => setCreateForm(prev => ({ ...prev, origin_type: 'HEAD' }))}
@@ -1053,6 +1603,17 @@ export default function BranchingPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setCreateForm(prev => ({ ...prev, origin_type: 'COMMIT' }))}
+                    className={`p-2 rounded-lg text-center border font-semibold cursor-pointer text-xs transition ${
+                      createForm.origin_type === 'COMMIT'
+                        ? 'bg-[#EDF3FC] border-[#D0E0F6] text-[#4263A5]'
+                        : 'bg-[#FFFFFF] border-[#E2E6EC] text-[#687386] hover:bg-[#F7F8FA]'
+                    }`}
+                  >
+                    Specific Commit
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setCreateForm(prev => ({ ...prev, origin_type: 'TIMESTAMP' }))}
                     className={`p-2 rounded-lg text-center border font-semibold cursor-pointer text-xs transition ${
                       createForm.origin_type === 'TIMESTAMP'
@@ -1060,9 +1621,19 @@ export default function BranchingPage() {
                         : 'bg-[#FFFFFF] border-[#E2E6EC] text-[#687386] hover:bg-[#F7F8FA]'
                     }`}
                   >
-                    Historical Timestamp
+                    Timestamp
                   </button>
                 </div>
+
+                {createForm.origin_type === 'COMMIT' && (
+                  <input
+                    type="text"
+                    placeholder="e.g. c102"
+                    value={createForm.base_commit_id}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, base_commit_id: e.target.value }))}
+                    className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E6EC] rounded-lg text-[#202833] text-xs font-mono focus:border-[#4263A5] outline-none"
+                  />
+                )}
 
                 {createForm.origin_type === 'TIMESTAMP' && (
                   <input
@@ -1127,11 +1698,16 @@ export default function BranchingPage() {
                   <label className="block text-[#202833] font-semibold mb-1">Target Relation</label>
                   <select
                     value={commitForm.table_name}
-                    onChange={(e) => setCommitForm(prev => ({ ...prev, table_name: e.target.value }))}
+                    onChange={(e) => {
+                      const nextTbl = e.target.value;
+                      const nextPk = nextTbl === 'CUSTOMERS' ? '101' : nextTbl === 'PRODUCTS' ? '201' : '501';
+                      populateCommitFormFromRow(nextTbl, nextPk, commitForm.operation_type);
+                    }}
                     className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E6EC] rounded-lg text-[#202833] focus:border-[#4263A5] outline-none cursor-pointer"
                   >
                     <option value="CUSTOMERS">CUSTOMERS</option>
                     <option value="PRODUCTS">PRODUCTS</option>
+                    <option value="ORDERS">ORDERS</option>
                   </select>
                 </div>
 
@@ -1151,13 +1727,37 @@ export default function BranchingPage() {
 
               <div>
                 <label className="block text-[#202833] font-semibold mb-1">Record ID (Primary Key) *</label>
-                <input
-                  type="text"
-                  required
-                  value={commitForm.record_id}
-                  onChange={(e) => setCommitForm(prev => ({ ...prev, record_id: e.target.value }))}
-                  className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E6EC] rounded-lg text-[#202833] font-mono font-bold focus:border-[#4263A5] outline-none"
-                />
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    required
+                    value={commitForm.record_id}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      populateCommitFormFromRow(commitForm.table_name, nextId, commitForm.operation_type);
+                    }}
+                    className="flex-1 px-3 py-2 bg-[#FFFFFF] border border-[#E2E6EC] rounded-lg text-[#202833] font-mono font-bold focus:border-[#4263A5] outline-none"
+                  />
+                  {commitForm.operation_type !== 'INSERT' && (
+                    <select
+                      value={commitForm.record_id}
+                      onChange={(e) => populateCommitFormFromRow(commitForm.table_name, e.target.value, commitForm.operation_type)}
+                      className="px-2 py-2 bg-[#F7F8FA] border border-[#E2E6EC] rounded-lg text-[#202833] text-xs cursor-pointer max-w-[180px]"
+                    >
+                      <option value="">Pick existing...</option>
+                      {branchState
+                        .filter(r => (r._table || 'CUSTOMERS') === commitForm.table_name)
+                        .map(r => {
+                          const pk = getRowPk(r, commitForm.table_name);
+                          return (
+                            <option key={pk} value={pk}>
+                              #{pk} {r.name || r.sku || ''}
+                            </option>
+                          );
+                        })}
+                    </select>
+                  )}
+                </div>
               </div>
 
               {commitForm.operation_type !== 'DELETE' && (
@@ -1166,7 +1766,7 @@ export default function BranchingPage() {
                     {commitForm.table_name} Entity Columns
                   </span>
 
-                  {commitForm.table_name === 'CUSTOMERS' ? (
+                  {commitForm.table_name === 'CUSTOMERS' && (
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
                         <label className="text-[10px] text-[#687386] font-semibold">Name</label>
@@ -1209,7 +1809,9 @@ export default function BranchingPage() {
                         />
                       </div>
                     </div>
-                  ) : (
+                  )}
+
+                  {commitForm.table_name === 'PRODUCTS' && (
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
                         <label className="text-[10px] text-[#687386] font-semibold">SKU</label>
@@ -1246,6 +1848,53 @@ export default function BranchingPage() {
                           value={commitForm.stock_quantity}
                           onChange={(e) => setCommitForm(prev => ({ ...prev, stock_quantity: e.target.value }))}
                           className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {commitForm.table_name === 'ORDERS' && (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Customer ID</label>
+                        <input
+                          type="number"
+                          value={commitForm.customer_id}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, customer_id: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Status</label>
+                        <select
+                          value={commitForm.order_status}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, order_status: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-medium"
+                        >
+                          <option value="PENDING">PENDING</option>
+                          <option value="PROCESSING">PROCESSING</option>
+                          <option value="COMPLETED">COMPLETED</option>
+                          <option value="DELIVERED">DELIVERED</option>
+                          <option value="CANCELLED">CANCELLED</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Total Amount ($)</label>
+                        <input
+                          type="number"
+                          step="100"
+                          value={commitForm.total_amount}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, total_amount: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Notes</label>
+                        <input
+                          type="text"
+                          value={commitForm.notes}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, notes: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-medium"
                         />
                       </div>
                     </div>
@@ -1406,7 +2055,6 @@ export default function BranchingPage() {
               <button onClick={() => setShowMergeModal(false)}><X className="w-4 h-4 text-[#687386] hover:text-[#202833] cursor-pointer" /></button>
             </div>
 
-            {/* Merge Config */}
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <label className="block text-[#202833] font-semibold mb-1">Source Branch (Incoming)</label>
@@ -1457,7 +2105,6 @@ export default function BranchingPage() {
               </button>
             )}
 
-            {/* CONFLICT RESOLUTION INTERFACE */}
             {mergeResult && mergeResult.status === 'CONFLICT' && (
               <div className="space-y-3 pt-3 border-t border-[#E2E6EC]">
                 <div className="p-3 bg-[#FEF3D6] border border-[#FEE3A2] rounded-lg flex items-center justify-between text-xs text-[#B06000]">
@@ -1485,7 +2132,6 @@ export default function BranchingPage() {
                           </span>
                         </div>
 
-                        {/* Three-Way Comparison Grid */}
                         <div className="grid grid-cols-3 gap-2 text-[11px]">
                           <div className="p-2 bg-[#FFFFFF] rounded border border-[#E2E6EC]">
                             <span className="text-[#687386] block text-[10px] font-semibold uppercase">Base (Ancestor)</span>

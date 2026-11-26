@@ -121,6 +121,21 @@ class TimeTravelRepository:
                     {"name": "notes", "type": "VARCHAR2(400)"}
                 ],
                 "primary_key": "order_id"
+            },
+            {
+                "name": "ORDER_ITEMS",
+                "table_name": "ORDER_ITEMS",
+                "row_count": len(oracle_emulator.order_items),
+                "history_count": sum(1 for c in oracle_emulator.change_log if c["table_name"] == "ORDER_ITEMS"),
+                "columns": [
+                    {"name": "item_id", "type": "NUMBER"},
+                    {"name": "order_id", "type": "NUMBER"},
+                    {"name": "product_id", "type": "NUMBER"},
+                    {"name": "quantity", "type": "NUMBER(6)"},
+                    {"name": "unit_price", "type": "NUMBER(10,2)"},
+                    {"name": "subtotal", "type": "NUMBER(12,2)"}
+                ],
+                "primary_key": "item_id"
             }
         ]
         return tables
@@ -160,6 +175,8 @@ class TimeTravelRepository:
             records = list(oracle_emulator.products.values())
         elif tbl == "ORDERS":
             records = list(oracle_emulator.orders.values())
+        elif tbl == "ORDER_ITEMS":
+            records = list(oracle_emulator.order_items.values())
         
         if search:
             s = search.lower()
@@ -812,6 +829,15 @@ class TimeTravelRepository:
 
     def get_branch_timeline(self, branch_id: Optional[Union[int, str]] = None) -> Dict[str, Any]:
         return oracle_emulator.get_branch_timeline(branch_id)
+
+    def revert_branch_to_commit(
+        self,
+        branch_id_or_name: Union[int, str],
+        target_commit_id: str,
+        author: str = "developer",
+        commit_message: Optional[str] = None
+    ) -> Dict[str, Any]:
+        return oracle_emulator.revert_branch_to_commit(branch_id_or_name, target_commit_id, author, commit_message)
 
 
 repository = TimeTravelRepository()

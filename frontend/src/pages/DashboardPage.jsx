@@ -3,7 +3,7 @@ import {
   Database, History, Flag, HardDrive, Zap, CheckCircle2, 
   AlertTriangle, RefreshCw, ArrowUpRight, Plus, Edit2, Trash2, 
   Search, Eye, Clock, Sparkles, X, ShieldAlert, ArrowRight,
-  UserPlus, ShoppingBag, ShoppingCart, Users
+  UserPlus, ShoppingBag, ShoppingCart, Users, GitBranch, GitCommit, RotateCcw
 } from 'lucide-react';
 import { 
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip 
@@ -24,6 +24,14 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Branch & Commit Context states
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('main');
+  const [branchCommits, setBranchCommits] = useState([]);
+  const [selectedCommitId, setSelectedCommitId] = useState('__HEAD__');
+  const [branchRecordsAll, setBranchRecordsAll] = useState([]);
+  const isViewingBranchSnapshot = selectedBranch !== 'main' || selectedCommitId !== '__HEAD__';
+
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [addTableTarget, setAddTableTarget] = useState('CUSTOMERS');
@@ -35,20 +43,37 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
   // Action toast / feedback banner
   const [actionFeedback, setActionFeedback] = useState(null);
 
+  // Reference lookups for FK dropdowns & multi-product order builder
+  const [allCustomers, setAllCustomers] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
+  const [allOrderItems, setAllOrderItems] = useState([]);
+  const [orderItemsDraft, setOrderItemsDraft] = useState([
+    { product_id: 201, quantity: 1 },
+    { product_id: 202, quantity: 1 }
+  ]);
+
   // 1. Fetch system-wide metrics and checkpoint telemetry
   const fetchDashboardStats = async () => {
     setLoading(true);
     try {
-      const [storageData, tablesData, cpData, decData] = await Promise.all([
+      const [storageData, tablesData, cpData, decData, branchList, custList, prodList, itemList] = await Promise.all([
         apiService.getStorageStats(),
         apiService.getTables(),
         apiService.getCheckpoints(),
         apiService.getPolicyDecisions(),
+        apiService.getBranches().catch(() => []),
+        apiService.getTableRecords('CUSTOMERS').catch(() => []),
+        apiService.getTableRecords('PRODUCTS').catch(() => []),
+        apiService.getTableRecords('ORDER_ITEMS').catch(() => []),
       ]);
       setStats(storageData);
       setTables(tablesData);
       setCheckpoints(cpData.slice(0, 5));
       setDecisions(decData.slice(0, 5));
+      setBranches(branchList || []);
+      setAllCustomers(custList || []);
+      setAllProducts(prodList || []);
+      setAllOrderItems(itemList || []);
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     } finally {
@@ -56,12 +81,25 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
     }
   };
 
-  // 2. Fetch records for the currently selected table
+  // 2. Fetch records for the currently selected table (and branch/commit if selected)
   const fetchRecords = async () => {
     setRecordsLoading(true);
     try {
-      const data = await apiService.getTableRecords(selectedTable, searchTerm);
-      setRecords(data || []);
+      if (!isViewingBranchSnapshot) {
+        const data = await apiService.getTableRecords(selectedTable, searchTerm);
+        setRecords(data || []);
+      } else {
+        const cid = selectedCommitId === '__HEAD__' ? null : selectedCommitId;
+        const stateRes = await apiService.getBranchState(selectedBranch, '__ALL__', cid);
+        const allRows = stateRes?.records || [];
+        setBranchRecordsAll(allRows);
+        let filtered = allRows.filter(r => (r._table || 'CUSTOMERS') === selectedTable);
+        if (searchTerm.trim()) {
+          const q = searchTerm.toLowerCase();
+          filtered = filtered.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
+        }
+        setRecords(filtered);
+      }
     } catch (err) {
       console.error('Failed to load records for table ' + selectedTable, err);
     } finally {
@@ -74,8 +112,16 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
   }, []);
 
   useEffect(() => {
+    if (selectedBranch) {
+      apiService.getBranchCommits(selectedBranch)
+        .then(data => setBranchCommits(data || []))
+        .catch(() => setBranchCommits([]));
+    }
+  }, [selectedBranch]);
+
+  useEffect(() => {
     fetchRecords();
-  }, [selectedTable]);
+  }, [selectedTable, selectedBranch, selectedCommitId]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -85,12 +131,13 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
   // Helper to extract primary key
   const getPkValue = (row) => {
     if (!row) return null;
-    return row.customer_id || row.product_id || row.order_id || Object.values(row)[0];
+    return row.customer_id || row.product_id || row.order_id || row.item_id || Object.values(row)[0];
   };
 
   const getPkField = (tableName) => {
     if (tableName === 'CUSTOMERS') return 'customer_id';
     if (tableName === 'PRODUCTS') return 'product_id';
+    if (tableName === 'ORDER_ITEMS') return 'item_id';
     return 'order_id';
   };
 
@@ -116,11 +163,23 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
         stock_quantity: '30',
       });
     } else if (table === 'ORDERS') {
+      const firstCustId = allCustomers[0]?.customer_id || 101;
+      const firstProdId = allProducts[0]?.product_id || 201;
+      const secondProdId = allProducts[1]?.product_id || firstProdId;
+      setOrderItemsDraft([
+        { product_id: firstProdId, quantity: 1 },
+        { product_id: secondProdId, quantity: 1 }
+      ]);
       setFormData({
-        customer_id: '101',
+        customer_id: String(firstCustId),
         status: 'PENDING',
-        total_amount: '1850.00',
-        notes: 'Priority expedited shipment',
+        notes: 'Multi-product enterprise order',
+      });
+    } else if (table === 'ORDER_ITEMS') {
+      setFormData({
+        order_id: '501',
+        product_id: String(allProducts[0]?.product_id || 201),
+        quantity: '1',
       });
     }
     setShowAddModal(true);
@@ -131,7 +190,17 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await apiService.createRecord(addTableTarget, formData);
+      const payload = addTableTarget === 'ORDERS'
+        ? {
+            ...formData,
+            customer_id: Number(formData.customer_id),
+            items: orderItemsDraft.map(it => ({
+              product_id: Number(it.product_id),
+              quantity: Number(it.quantity)
+            }))
+          }
+        : formData;
+      const res = await apiService.createRecord(addTableTarget, payload);
       setShowAddModal(false);
       setActionFeedback({
         type: 'SUCCESS',
@@ -213,7 +282,10 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
 
   // Helper to reliably retrieve row count for any table
   const getTableCount = (tblName) => {
-    if (selectedTable === tblName && Array.isArray(records) && !recordsLoading) {
+    if (isViewingBranchSnapshot) {
+      return branchRecordsAll.filter(r => (r._table || 'CUSTOMERS') === tblName).length;
+    }
+    if (selectedTable === tblName && Array.isArray(records) && !recordsLoading && !searchTerm.trim()) {
       return records.length;
     }
     const found = tables.find(t => (t.name === tblName || t.table_name === tblName));
@@ -223,9 +295,11 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
   const customersCount = getTableCount('CUSTOMERS');
   const productsCount = getTableCount('PRODUCTS');
   const ordersCount = getTableCount('ORDERS');
-  const totalCurrentRows = (tables && tables.length > 0)
-    ? tables.reduce((acc, t) => acc + (t.row_count || 0), 0)
-    : (customersCount + productsCount + ordersCount);
+  const totalCurrentRows = isViewingBranchSnapshot
+    ? (customersCount + productsCount + ordersCount)
+    : ((tables && tables.length > 0)
+        ? tables.reduce((acc, t) => acc + (t.row_count || 0), 0)
+        : (customersCount + productsCount + ordersCount));
 
   const pieData = stats ? [
     { name: 'Current Data', value: stats.current_data_bytes || 4096, color: '#38bdf8' },
@@ -286,6 +360,73 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading || recordsLoading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 1.5. Branch & Commit Context Selector Bar */}
+      <div className="content-panel p-3.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <div className="flex items-center space-x-2">
+            <GitBranch className="w-4 h-4 text-[#4263A5]" />
+            <span className="font-semibold text-[#202833]">Database Branch:</span>
+            <select
+              value={selectedBranch}
+              onChange={(e) => {
+                setSelectedBranch(e.target.value);
+                setSelectedCommitId('__HEAD__');
+              }}
+              className="px-2.5 py-1.5 bg-[#F7F8FA] border border-[#E2E6EC] rounded-lg text-xs font-semibold text-[#202833] focus:border-[#4263A5] outline-none cursor-pointer"
+            >
+              {branches.length === 0 ? (
+                <option value="main">main (default)</option>
+              ) : (
+                branches.map(b => (
+                  <option key={b.branch_id} value={b.branch_name}>
+                    {b.branch_name} {b.is_default === 'Y' ? '(default)' : ''}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <GitCommit className="w-4 h-4 text-[#D97706]" />
+            <span className="font-semibold text-[#202833]">Commit:</span>
+            <select
+              value={selectedCommitId}
+              onChange={(e) => setSelectedCommitId(e.target.value)}
+              className="px-2.5 py-1.5 bg-[#F7F8FA] border border-[#E2E6EC] rounded-lg text-xs font-mono text-[#202833] focus:border-[#4263A5] outline-none cursor-pointer max-w-[260px]"
+            >
+              <option value="__HEAD__">HEAD (Latest on {selectedBranch})</option>
+              {branchCommits.map(c => (
+                <option key={c.commit_id} value={c.commit_id}>
+                  {c.commit_id} — {c.commit_message.substring(0, 35)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          {isViewingBranchSnapshot && (
+            <button
+              onClick={() => {
+                setSelectedBranch('main');
+                setSelectedCommitId('__HEAD__');
+              }}
+              className="flex items-center space-x-1 px-2.5 py-1.5 bg-[#FEF3D6] hover:bg-[#FDE68A] border border-[#FEE3A2] text-[#B06000] rounded-lg text-xs font-semibold cursor-pointer transition"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to Live Main</span>
+            </button>
+          )}
+          <button
+            onClick={() => onNavigate('branching')}
+            className="flex items-center space-x-1 px-3 py-1.5 bg-[#EDF3FC] hover:bg-[#DCE7F9] border border-[#D0E0F6] text-[#4263A5] rounded-lg text-xs font-semibold cursor-pointer transition"
+          >
+            <span>Open Temporal Branches</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
@@ -524,7 +665,7 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
         <div className="p-4 bg-slate-950/40 border-b border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Table Pills */}
           <div className="flex items-center space-x-2 overflow-x-auto pb-1 md:pb-0">
-            {['CUSTOMERS', 'PRODUCTS', 'ORDERS'].map((tbl) => {
+            {['CUSTOMERS', 'PRODUCTS', 'ORDERS', 'ORDER_ITEMS'].map((tbl) => {
               const count = getTableCount(tbl);
               const isActive = selectedTable === tbl;
               return (
@@ -613,11 +754,20 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                   )}
                   {selectedTable === 'ORDERS' && (
                     <>
-                      <th className="py-3 px-4">Customer ID</th>
-                      <th className="py-3 px-4">Order Date</th>
+                      <th className="py-3 px-4">Customer (FK)</th>
+                      <th className="py-3 px-4">Products (Line Items)</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4">Total Amount</th>
                       <th className="py-3 px-4">Notes</th>
+                    </>
+                  )}
+                  {selectedTable === 'ORDER_ITEMS' && (
+                    <>
+                      <th className="py-3 px-4">Order ID (FK)</th>
+                      <th className="py-3 px-4">Product (FK)</th>
+                      <th className="py-3 px-4">Quantity</th>
+                      <th className="py-3 px-4">Unit Price</th>
+                      <th className="py-3 px-4">Subtotal</th>
                     </>
                   )}
                   <th className="py-3 px-4 text-right">Database Operations</th>
@@ -683,31 +833,66 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                       )}
 
                       {/* ORDERS Row */}
-                      {selectedTable === 'ORDERS' && (
-                        <>
-                          <td className="py-3 px-4 font-mono text-indigo-300">
-                            Customer #{row.customer_id}
-                          </td>
-                          <td className="py-3 px-4 text-slate-400 text-[11px]">
-                            {row.order_date ? new Date(row.order_date).toLocaleString() : '-'}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                              row.status === 'COMPLETED' || row.status === 'DELIVERED'
-                                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50'
-                                : row.status === 'PENDING'
-                                ? 'bg-amber-950/60 text-amber-300 border-amber-800/50'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
-                            }`}>
-                              {row.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 font-mono text-slate-200">
-                            ${Number(row.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="py-3 px-4 text-slate-400 truncate max-w-xs">{row.notes || '-'}</td>
-                        </>
-                      )}
+                      {selectedTable === 'ORDERS' && (() => {
+                        const cust = allCustomers.find(c => Number(c.customer_id) === Number(row.customer_id));
+                        const lineItems = allOrderItems.filter(it => Number(it.order_id) === Number(row.order_id));
+                        return (
+                          <>
+                            <td className="py-3 px-4 text-xs">
+                              <span className="font-mono text-[#4263A5] font-semibold">#{row.customer_id}</span>
+                              {cust && <span className="ml-1.5 text-[#687386]">{cust.name}</span>}
+                            </td>
+                            <td className="py-3 px-4 text-xs">
+                              {lineItems.length > 0 ? (
+                                <span className="px-2 py-0.5 rounded-full bg-[#EDF3FC] text-[#4263A5] border border-[#D0E0F6] font-medium text-[11px]">
+                                  {lineItems.length} {lineItems.length === 1 ? 'product' : 'products'} (
+                                  {lineItems.map(it => `#${it.product_id}×${it.quantity}`).join(', ')})
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">No line items</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                row.status === 'COMPLETED' || row.status === 'DELIVERED'
+                                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50'
+                                  : row.status === 'PENDING'
+                                  ? 'bg-amber-950/60 text-amber-300 border-amber-800/50'
+                                  : 'bg-slate-800 text-slate-400 border-slate-700'
+                              }`}>
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-mono text-slate-200">
+                              ${Number(row.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3 px-4 text-slate-400 truncate max-w-xs">{row.notes || '-'}</td>
+                          </>
+                        );
+                      })()}
+
+                      {/* ORDER_ITEMS Row */}
+                      {selectedTable === 'ORDER_ITEMS' && (() => {
+                        const prod = allProducts.find(p => Number(p.product_id) === Number(row.product_id));
+                        return (
+                          <>
+                            <td className="py-3 px-4 font-mono text-[#4263A5] font-semibold">
+                              Order #{row.order_id}
+                            </td>
+                            <td className="py-3 px-4 text-xs">
+                              <span className="font-mono text-[#0D8A5B] font-semibold">#{row.product_id}</span>
+                              {prod && <span className="ml-1.5 text-[#202833] font-medium">{prod.name}</span>}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-semibold">{row.quantity}</td>
+                            <td className="py-3 px-4 font-mono">
+                              ${Number(row.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-semibold text-[#202833]">
+                              ${Number(row.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </td>
+                          </>
+                        );
+                      })()}
 
                       {/* Action Buttons */}
                       <td className="py-3 px-4 text-right">
@@ -1056,19 +1241,24 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                 </>
               )}
 
-              {/* Fields for ORDERS */}
+              {/* Fields for ORDERS (1 Customer + Multiple Products) */}
               {addTableTarget === 'ORDERS' && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1">Customer ID *</label>
-                      <input
-                        type="number"
+                      <label className="block text-xs font-medium text-slate-300 mb-1">Customer (Referenced FK) *</label>
+                      <select
                         required
                         value={formData.customer_id || '101'}
                         onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
                         className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-                      />
+                      >
+                        {allCustomers.map(c => (
+                          <option key={c.customer_id} value={c.customer_id}>
+                            #{c.customer_id} — {c.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">Status</label>
@@ -1085,16 +1275,82 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                       </select>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">Total Amount ($) *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      value={formData.total_amount || ''}
-                      onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-                    />
+
+                  {/* Multi-Product Line Items Builder */}
+                  <div className="p-3 rounded-xl bg-[#F7F8FA] border border-[#E2E6EC] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#202833]">
+                        Order Products (Multiple Line Items)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setOrderItemsDraft(prev => [
+                          ...prev,
+                          { product_id: allProducts[0]?.product_id || 201, quantity: 1 }
+                        ])}
+                        className="px-2 py-1 rounded bg-[#4263A5] text-white text-[11px] font-semibold cursor-pointer hover:bg-[#345188]"
+                      >
+                        + Add Product
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-44 overflow-y-auto">
+                      {orderItemsDraft.map((item, idx) => {
+                        const prod = allProducts.find(p => Number(p.product_id) === Number(item.product_id));
+                        const lineSubtotal = (Number(prod?.unit_price || 0)) * Number(item.quantity || 0);
+                        return (
+                          <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                            <select
+                              value={item.product_id}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setOrderItemsDraft(prev => prev.map((it, i) => i === idx ? { ...it, product_id: val } : it));
+                              }}
+                              className="col-span-6 px-2 py-1.5 rounded border border-[#E2E6EC] bg-[#FFFFFF] text-xs text-[#202833]"
+                            >
+                              {allProducts.map(p => (
+                                <option key={p.product_id} value={p.product_id}>
+                                  #{p.product_id} {p.name} (${p.unit_price})
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = Math.max(1, Number(e.target.value));
+                                setOrderItemsDraft(prev => prev.map((it, i) => i === idx ? { ...it, quantity: val } : it));
+                              }}
+                              className="col-span-2 px-2 py-1.5 rounded border border-[#E2E6EC] bg-[#FFFFFF] text-xs font-mono text-[#202833]"
+                              title="Quantity"
+                            />
+                            <span className="col-span-3 text-right font-mono text-xs font-semibold text-[#0D8A5B]">
+                              ${lineSubtotal.toLocaleString()}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={orderItemsDraft.length <= 1}
+                              onClick={() => setOrderItemsDraft(prev => prev.filter((_, i) => i !== idx))}
+                              className="col-span-1 text-center text-[#C5221F] disabled:opacity-30 cursor-pointer font-bold"
+                              title="Remove product"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="pt-2 border-t border-[#E2E6EC] flex justify-between items-center text-xs">
+                      <span className="font-semibold text-[#687386]">Auto-Calculated Order Total:</span>
+                      <span className="font-mono font-bold text-[#202833] text-sm">
+                        ${orderItemsDraft.reduce((sum, it) => {
+                          const p = allProducts.find(pr => Number(pr.product_id) === Number(it.product_id));
+                          return sum + (Number(p?.unit_price || 0) * Number(it.quantity || 0));
+                        }, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1">Order Notes / Memo</label>
@@ -1107,6 +1363,47 @@ export default function DashboardPage({ onNavigate, onSelectRecord }) {
                     />
                   </div>
                 </>
+              )}
+
+              {/* Fields for ORDER_ITEMS */}
+              {addTableTarget === 'ORDER_ITEMS' && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Order ID (FK) *</label>
+                    <input
+                      type="number"
+                      required
+                      value={formData.order_id || '501'}
+                      onChange={(e) => setFormData({ ...formData, order_id: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Product (FK) *</label>
+                    <select
+                      value={formData.product_id || '201'}
+                      onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+                    >
+                      {allProducts.map(p => (
+                        <option key={p.product_id} value={p.product_id}>
+                          #{p.product_id} {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">Quantity *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={formData.quantity || '1'}
+                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-200"
+                    />
+                  </div>
+                </div>
               )}
 
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end space-x-3">

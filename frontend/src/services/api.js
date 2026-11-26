@@ -118,6 +118,8 @@ export const apiService = {
   mergeBranches: (data) => api.post('/branches/merge', data).then(res => res.data),
   resolveMergeConflict: (mergeId, data) => api.post(`/branches/merge/${mergeId}/resolve`, data).then(res => res.data),
   abortMerge: (mergeId) => api.post(`/branches/merge/${mergeId}/abort`).then(res => res.data),
+  revertBranchToCommit: (branchId, targetCommitId, author = 'developer') =>
+    api.post(`/branches/${branchId}/revert/${targetCommitId}`, null, { params: { author } }).then(res => res.data),
 };
 
 export default apiService;

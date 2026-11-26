@@ -178,6 +178,21 @@ def get_branch_timeline(branch_id: str):
         logger.error(f"Failed to get timeline for branch {branch_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/{branch_id:path}/revert/{target_commit_id}", response_model=Dict[str, Any], summary="Revert branch state back to an earlier commit")
+def revert_branch_to_commit(
+    branch_id: str,
+    target_commit_id: str,
+    author: str = Query(default="developer")
+):
+    """Non-destructively reverts a branch's database state back to target_commit_id via a new commit."""
+    try:
+        return repository.revert_branch_to_commit(branch_id, target_commit_id, author=author)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to revert branch {branch_id} to {target_commit_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{branch_id:path}", response_model=BranchInfo, summary="Get details for a specific branch")
 def get_branch(branch_id: str):
     """Fetches metadata, origin base, and HEAD commit for a branch."""

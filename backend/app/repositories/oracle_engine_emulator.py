@@ -25,10 +25,10 @@ class OracleEngineEmulator:
         self.seq_customer = 1005
         self.seq_product = 2005
         self.seq_order = 5003
-        self.seq_item = 1005
+        self.seq_item = 2000
         self.seq_tx = 10
-        self.seq_change = 25
-        self.seq_commit = 25
+        self.seq_change = 200
+        self.seq_commit = 200
         self.seq_checkpoint = 3
         self.seq_cp_data = 100
         self.seq_policy_decision = 5
@@ -98,6 +98,35 @@ class OracleEngineEmulator:
         for c in [c1, c2, c3, c4, c5]:
             self.customers[str(c["customer_id"])] = dict(c)
 
+        # Additional realistic enterprise customers (106..150 -> total 50)
+        extra_companies = [
+            "Apex Logistics", "BlueSky Robotics", "Cascade Energy", "Delta BioLabs", "Evergreen Retail",
+            "Falcon Aerospace", "Granite Construction", "Horizon Telecom", "Ironclad Security", "Jade Financial",
+            "Keystone Health", "Lumina Photonics", "Meridian Shipping", "Northstar Cloud", "Obsidian Mining",
+            "Pacific Semiconductor", "Quantum Networks", "Redwood Analytics", "Silverline Transit", "Titan Manufacturing",
+            "Unity Software", "Vanguard Defense", "Westcoast Media", "Xenon Pharma", "Yellowstone Agri",
+            "Zenith Electronics", "Atlas Freight", "Beacon Software", "Cobalt Materials", "Dynamic Motors",
+            "Eclipse Systems", "Frontier Energy", "Global Foods", "Harbor Marine", "Infinity AI",
+            "Jupiter Space", "Kinetix Robotics", "Liberty Insurance", "Matrix Solutions", "Nexus Biotech",
+            "Orion Optics", "Pinnacle Capital", "Quest Diagnostics", "Summit Outdoors", "Vertex Engineering"
+        ]
+        statuses = ["ACTIVE", "ACTIVE", "ACTIVE", "ACTIVE", "SUSPENDED"]
+        extra_customers = []
+        for idx, comp_name in enumerate(extra_companies, start=106):
+            slug = comp_name.lower().replace(" ", "")
+            cust_obj = {
+                "customer_id": idx,
+                "name": comp_name,
+                "email": f"ops@{slug}.com",
+                "phone": f"+1-555-{idx:04d}",
+                "status": statuses[idx % len(statuses)],
+                "credit_limit": float(((idx % 10) + 1) * 25000),
+                "created_at": self._past_iso(120),
+                "updated_at": self._past_iso(120)
+            }
+            self.customers[str(idx)] = dict(cust_obj)
+            extra_customers.append(cust_obj)
+
         # Products
         p1 = {"product_id": 201, "sku": "SKU-SRV-01", "name": "High-Density Rack Server", "category": "Hardware", "unit_price": 4250.0, "stock_quantity": 35, "created_at": self._past_iso(120), "updated_at": self._past_iso(45)}
         p2 = {"product_id": 202, "sku": "SKU-SW-DB", "name": "Enterprise DBMS License 1-Yr", "category": "Software", "unit_price": 12000.0, "stock_quantity": 200, "created_at": self._past_iso(120), "updated_at": self._past_iso(120)}
@@ -108,6 +137,24 @@ class OracleEngineEmulator:
         for p in [p1, p2, p3, p4, p5]:
             self.products[str(p["product_id"])] = dict(p)
 
+        # Additional realistic enterprise products (206..250 -> total 50)
+        categories = ["Hardware", "Software", "Networking", "Security", "Power", "Storage"]
+        extra_products = []
+        for idx in range(206, 251):
+            cat = categories[idx % len(categories)]
+            prod_obj = {
+                "product_id": idx,
+                "sku": f"SKU-{cat[:3].upper()}-{idx}",
+                "name": f"Enterprise {cat} Unit Model {idx - 200}",
+                "category": cat,
+                "unit_price": float(500 + (idx - 200) * 150),
+                "stock_quantity": 10 + (idx % 40) * 5,
+                "created_at": self._past_iso(120),
+                "updated_at": self._past_iso(120)
+            }
+            self.products[str(idx)] = dict(prod_obj)
+            extra_products.append(prod_obj)
+
         # Orders
         o1 = {"order_id": 501, "customer_id": 101, "order_date": self._past_iso(100), "status": "COMPLETED", "total_amount": 21000.0, "notes": "Initial server deployment", "updated_at": self._past_iso(90)}
         o2 = {"order_id": 502, "customer_id": 103, "order_date": self._past_iso(80), "status": "PROCESSING", "total_amount": 9050.0, "notes": "R&D Lab networking upgrade", "updated_at": self._past_iso(80)}
@@ -115,6 +162,68 @@ class OracleEngineEmulator:
 
         for o in [o1, o2, o3]:
             self.orders[str(o["order_id"])] = dict(o)
+
+        # Additional realistic orders (504..550 -> total 50)
+        order_statuses = ["COMPLETED", "PROCESSING", "PENDING", "DELIVERED", "COMPLETED"]
+        extra_orders = []
+        for idx in range(504, 551):
+            cust_id = 101 + ((idx - 504) % 50)
+            ord_obj = {
+                "order_id": idx,
+                "customer_id": cust_id,
+                "order_date": self._past_iso(110),
+                "status": order_statuses[idx % len(order_statuses)],
+                "total_amount": float(1500 + (idx - 500) * 350),
+                "notes": f"Enterprise procurement batch #{idx}",
+                "updated_at": self._past_iso(100)
+            }
+            self.orders[str(idx)] = dict(ord_obj)
+            extra_orders.append(ord_obj)
+
+        # Order Items (Referencing ORDERS.order_id and PRODUCTS.product_id)
+        # Multiple products per order!
+        base_items = [
+            {"item_id": 1001, "order_id": 501, "product_id": 201, "quantity": 2, "unit_price": 4500.0, "subtotal": 9000.0},
+            {"item_id": 1002, "order_id": 501, "product_id": 202, "quantity": 1, "unit_price": 12000.0, "subtotal": 12000.0},
+            {"item_id": 1003, "order_id": 502, "product_id": 203, "quantity": 1, "unit_price": 2850.0, "subtotal": 2850.0},
+            {"item_id": 1004, "order_id": 502, "product_id": 204, "quantity": 1, "unit_price": 6200.0, "subtotal": 6200.0},
+            {"item_id": 1005, "order_id": 503, "product_id": 202, "quantity": 2, "unit_price": 12000.0, "subtotal": 24000.0},
+        ]
+        for it in base_items:
+            self.order_items[str(it["item_id"])] = dict(it)
+
+        extra_items = []
+        next_item_id = 1006
+        for idx in range(504, 551):
+            p_id_1 = 201 + ((idx - 504) % 50)
+            qty_1 = 1 + (idx % 3)
+            up_1 = float(self.products[str(p_id_1)]["unit_price"])
+            it1 = {
+                "item_id": next_item_id, "order_id": idx, "product_id": p_id_1,
+                "quantity": qty_1, "unit_price": up_1, "subtotal": round(qty_1 * up_1, 2)
+            }
+            self.order_items[str(next_item_id)] = dict(it1)
+            extra_items.append(it1)
+            next_item_id += 1
+
+            # Give every 2nd order a second product so orders showcase multi-product line items
+            if idx % 2 == 0:
+                p_id_2 = 201 + ((idx - 504 + 7) % 50)
+                qty_2 = 1 + ((idx + 1) % 2)
+                up_2 = float(self.products[str(p_id_2)]["unit_price"])
+                it2 = {
+                    "item_id": next_item_id, "order_id": idx, "product_id": p_id_2,
+                    "quantity": qty_2, "unit_price": up_2, "subtotal": round(qty_2 * up_2, 2)
+                }
+                self.order_items[str(next_item_id)] = dict(it2)
+                extra_items.append(it2)
+                next_item_id += 1
+
+            # Keep order total_amount consistent with its line items
+            order_total = sum(
+                it["subtotal"] for it in self.order_items.values() if it["order_id"] == idx
+            )
+            self.orders[str(idx)]["total_amount"] = round(order_total, 2)
 
         # Historical Change Log Seed:
         # 1. Initial Insert logs (120 mins ago)
@@ -146,7 +255,18 @@ class OracleEngineEmulator:
             ("PRODUCTS", "202", p2), ("PRODUCTS", "203", p3), ("PRODUCTS", "204", p4), ("PRODUCTS", "205", p5),
             ("ORDERS", "501", o1), ("ORDERS", "502", o2), ("ORDERS", "503", o3),
         ]
+        for c_obj in extra_customers:
+            initial_rows.append(("CUSTOMERS", str(c_obj["customer_id"]), c_obj))
+        for p_obj in extra_products:
+            initial_rows.append(("PRODUCTS", str(p_obj["product_id"]), p_obj))
+        for o_obj in extra_orders:
+            initial_rows.append(("ORDERS", str(o_obj["order_id"]), o_obj))
+        for it_obj in base_items + extra_items:
+            initial_rows.append(("ORDER_ITEMS", str(it_obj["item_id"]), it_obj))
+
+        last_init_change_id = 3
         for change_id, (table_name, record_pk, row) in enumerate(initial_rows, start=4):
+            last_init_change_id = change_id
             self.change_log.append({
                 "change_id": change_id, "tx_id": 1, "table_name": table_name, "record_pk": record_pk,
                 "operation_type": "INSERT", "old_values": None,
@@ -163,23 +283,27 @@ class OracleEngineEmulator:
             "table_name": "CUSTOMERS",
             "target_boundary_ts": t_cp1,
             "boundary_tx_id": 1,
-            "boundary_change_id": 13,
+            "boundary_change_id": last_init_change_id,
             "strategy_used": "MANUAL",
             "status": "VALID",
-            "row_count": 5,
-            "storage_bytes": 1420,
+            "row_count": 50,
+            "storage_bytes": 14200,
             "creation_duration_ms": 14.5,
             "decision_reason": "Baseline initial state checkpoint",
             "created_at": t_cp1
         })
         # Checkpoint Data for Customers at CP1
-        for cid, cust in [
+        cp_customers = [
             ("101", {"customer_id": 101, "name": "Acme Industrial Corp", "email": "procurement@acmeind.com", "phone": "+1-555-0101", "status": "ACTIVE", "credit_limit": 50000.0}),
             ("102", {key: value for key, value in c2.items() if key not in {"created_at", "updated_at"}}),
             ("103", {key: value for key, value in c3.items() if key not in {"created_at", "updated_at"}}),
             ("104", {key: value for key, value in c4.items() if key not in {"created_at", "updated_at"}}),
             ("105", {"customer_id": 105, "name": "Cyberdyne Systems", "email": "miles@cyberdyne.net", "phone": "+1-555-0105", "status": "SUSPENDED", "credit_limit": 15000.0})
-        ]:
+        ]
+        for c_obj in extra_customers:
+            cp_customers.append((str(c_obj["customer_id"]), {key: value for key, value in c_obj.items() if key not in {"created_at", "updated_at"}}))
+
+        for cid, cust in cp_customers:
             self.checkpoint_data.append({
                 "data_id": len(self.checkpoint_data) + 1,
                 "checkpoint_id": 1,
@@ -192,38 +316,38 @@ class OracleEngineEmulator:
         # 3. Subsequent Workload Changes (after Checkpoint #1)
         t_upd1 = self._past_iso(30)
         self.change_log.append({
-            "change_id": 14, "tx_id": 2, "table_name": "CUSTOMERS", "record_pk": "101",
+            "change_id": last_init_change_id + 1, "tx_id": 2, "table_name": "CUSTOMERS", "record_pk": "101",
             "operation_type": "UPDATE",
             "old_values": {"customer_id": 101, "name": "Acme Industrial Corp", "email": "procurement@acmeind.com", "phone": "+1-555-0101", "status": "ACTIVE", "credit_limit": 50000.0},
             "new_values": {"customer_id": 101, "name": "Acme Industrial Corp", "email": "procurement@acmeind.com", "phone": "+1-555-0999", "status": "ACTIVE", "credit_limit": 75000.0},
             "delta_values": {"phone": {"old": "+1-555-0101", "new": "+1-555-0999"}, "credit_limit": {"old": 50000.0, "new": 75000.0}},
             "changed_columns": "phone,credit_limit",
             "change_timestamp": t_upd1,
-            "commit_order_seq": 14
+            "commit_order_seq": last_init_change_id + 1
         })
 
         t_upd2 = self._past_iso(45)
         self.change_log.append({
-            "change_id": 15, "tx_id": 3, "table_name": "PRODUCTS", "record_pk": "201",
+            "change_id": last_init_change_id + 2, "tx_id": 3, "table_name": "PRODUCTS", "record_pk": "201",
             "operation_type": "UPDATE",
             "old_values": {"product_id": 201, "sku": "SKU-SRV-01", "name": "High-Density Rack Server", "category": "Hardware", "unit_price": 4500.0, "stock_quantity": 45},
             "new_values": {"product_id": 201, "sku": "SKU-SRV-01", "name": "High-Density Rack Server", "category": "Hardware", "unit_price": 4250.0, "stock_quantity": 35},
             "delta_values": {"unit_price": {"old": 4500.0, "new": 4250.0}, "stock_quantity": {"old": 45, "new": 35}},
             "changed_columns": "unit_price,stock_quantity",
             "change_timestamp": t_upd2,
-            "commit_order_seq": 15
+            "commit_order_seq": last_init_change_id + 2
         })
 
         t_upd3 = self._past_iso(15)
         self.change_log.append({
-            "change_id": 16, "tx_id": 4, "table_name": "CUSTOMERS", "record_pk": "105",
+            "change_id": last_init_change_id + 3, "tx_id": 4, "table_name": "CUSTOMERS", "record_pk": "105",
             "operation_type": "UPDATE",
             "old_values": {"customer_id": 105, "name": "Cyberdyne Systems", "email": "miles@cyberdyne.net", "phone": "+1-555-0105", "status": "SUSPENDED", "credit_limit": 15000.0},
             "new_values": {"customer_id": 105, "name": "Cyberdyne Systems", "email": "miles@cyberdyne.net", "phone": "+1-555-0105", "status": "ACTIVE", "credit_limit": 40000.0},
             "delta_values": {"status": {"old": "SUSPENDED", "new": "ACTIVE"}, "credit_limit": {"old": 15000.0, "new": 40000.0}},
             "changed_columns": "status,credit_limit",
             "change_timestamp": t_upd3,
-            "commit_order_seq": 16
+            "commit_order_seq": last_init_change_id + 3
         })
 
         # Policy decision logs
@@ -255,7 +379,7 @@ class OracleEngineEmulator:
         })
 
         # 3. Seed default 'main' branch and initial commit
-        main_now = self._past_iso(120)
+        main_now = self._now_iso()
         self.branches.append({
             "branch_id": 1,
             "branch_name": "main",
@@ -726,18 +850,93 @@ class OracleEngineEmulator:
             self.products[pk] = record
 
         elif tbl == "ORDERS":
+            cust_id = int(record.get("customer_id", 0))
+            if str(cust_id) not in self.customers:
+                raise ValueError(f"ORA-02291: integrity constraint violated - parent key CUSTOMERS#{cust_id} not found")
             if "order_id" not in record or not record["order_id"]:
                 self.seq_order += 1
                 record["order_id"] = self.seq_order
             else:
                 record["order_id"] = int(record["order_id"])
             pk = str(record["order_id"])
-            record["customer_id"] = int(record["customer_id"])
+            record["customer_id"] = cust_id
             record["status"] = record.get("status", "PENDING")
-            record["total_amount"] = float(record.get("total_amount", 0.0))
+
+            # Support creating an order with multiple products ("items": [{product_id, quantity}, ...])
+            items_input = record.pop("items", None)
+            created_items = []
+            if isinstance(items_input, list) and len(items_input) > 0:
+                computed_total = 0.0
+                for item in items_input:
+                    pid = int(item.get("product_id", 0))
+                    qty = int(item.get("quantity", 1))
+                    if str(pid) not in self.products:
+                        raise ValueError(f"ORA-02291: integrity constraint violated - parent key PRODUCTS#{pid} not found")
+                    if qty <= 0:
+                        raise ValueError("CHECK constraint violated: ORDER_ITEMS.quantity must be > 0")
+                    unit_price = float(item.get("unit_price") if item.get("unit_price") is not None else self.products[str(pid)]["unit_price"])
+                    subtotal = round(qty * unit_price, 2)
+                    computed_total += subtotal
+                    self.seq_item += 1
+                    item_rec = {
+                        "item_id": self.seq_item,
+                        "order_id": record["order_id"],
+                        "product_id": pid,
+                        "quantity": qty,
+                        "unit_price": unit_price,
+                        "subtotal": subtotal
+                    }
+                    created_items.append(item_rec)
+                record["total_amount"] = round(computed_total, 2)
+            else:
+                record["total_amount"] = float(record.get("total_amount", 0.0))
+
             record["order_date"] = record.get("order_date", now_ts)
             record["updated_at"] = now_ts
             self.orders[pk] = record
+
+            for item_rec in created_items:
+                ipk = str(item_rec["item_id"])
+                self.order_items[ipk] = item_rec
+                self.seq_change += 1
+                self.seq_commit += 1
+                self.change_log.append({
+                    "change_id": self.seq_change,
+                    "tx_id": tx_id,
+                    "table_name": "ORDER_ITEMS",
+                    "record_pk": ipk,
+                    "operation_type": "INSERT",
+                    "old_values": None,
+                    "new_values": dict(item_rec),
+                    "delta_values": None,
+                    "changed_columns": "ALL",
+                    "change_timestamp": now_ts,
+                    "commit_order_seq": self.seq_commit
+                })
+
+        elif tbl == "ORDER_ITEMS":
+            ord_id = int(record.get("order_id", 0))
+            prod_id = int(record.get("product_id", 0))
+            if str(ord_id) not in self.orders:
+                raise ValueError(f"ORA-02291: integrity constraint violated - parent key ORDERS#{ord_id} not found")
+            if str(prod_id) not in self.products:
+                raise ValueError(f"ORA-02291: integrity constraint violated - parent key PRODUCTS#{prod_id} not found")
+            qty = int(record.get("quantity", 1))
+            if qty <= 0:
+                raise ValueError("CHECK constraint violated: ORDER_ITEMS.quantity must be > 0")
+            if "item_id" not in record or not record["item_id"]:
+                self.seq_item += 1
+                record["item_id"] = self.seq_item
+            else:
+                record["item_id"] = int(record["item_id"])
+            pk = str(record["item_id"])
+            unit_price = float(record.get("unit_price") if record.get("unit_price") is not None else self.products[str(prod_id)]["unit_price"])
+            record["order_id"] = ord_id
+            record["product_id"] = prod_id
+            record["quantity"] = qty
+            record["unit_price"] = unit_price
+            record["subtotal"] = round(qty * unit_price, 2)
+            self.order_items[pk] = record
         else:
             raise ValueError(f"Table {table_name} not supported for insertion.")
 
@@ -777,7 +976,15 @@ class OracleEngineEmulator:
         elif tbl == "PRODUCTS":
             target_map = self.products
         elif tbl == "ORDERS":
+            if "customer_id" in data and str(int(data["customer_id"])) not in self.customers:
+                raise ValueError(f"ORA-02291: integrity constraint violated - parent key CUSTOMERS#{data['customer_id']} not found")
             target_map = self.orders
+        elif tbl == "ORDER_ITEMS":
+            if "order_id" in data and str(int(data["order_id"])) not in self.orders:
+                raise ValueError(f"ORA-02291: integrity constraint violated - parent key ORDERS#{data['order_id']} not found")
+            if "product_id" in data and str(int(data["product_id"])) not in self.products:
+                raise ValueError(f"ORA-02291: integrity constraint violated - parent key PRODUCTS#{data['product_id']} not found")
+            target_map = self.order_items
         else:
             raise ValueError(f"Table {table_name} not supported.")
 
@@ -790,7 +997,9 @@ class OracleEngineEmulator:
         changed_cols = []
         delta_vals = {}
         for k, v in data.items():
-            if k in ("customer_id", "product_id", "order_id", "created_at"):
+            if k in ("customer_id", "product_id", "order_id", "item_id", "created_at") and k == (
+                "customer_id" if tbl == "CUSTOMERS" else "product_id" if tbl == "PRODUCTS" else "order_id" if tbl == "ORDERS" else "item_id"
+            ):
                 continue  # Protect primary keys and creation dates
             if k in old_row:
                 old_val = old_row[k]
@@ -850,11 +1059,27 @@ class OracleEngineEmulator:
             target_map = self.products
         elif tbl == "ORDERS":
             target_map = self.orders
+        elif tbl == "ORDER_ITEMS":
+            target_map = self.order_items
         else:
             raise ValueError(f"Table {table_name} not supported.")
 
         if pk not in target_map:
             raise ValueError(f"Record with key {pk} not found in {tbl}.")
+
+        # Enforce Referenced Key constraints (ORA-02292) and ON DELETE CASCADE
+        if tbl == "PRODUCTS":
+            ref_items = [it for it in self.order_items.values() if str(it.get("product_id")) == pk]
+            if ref_items:
+                raise ValueError(
+                    f"ORA-02292: integrity constraint violated - child record found in ORDER_ITEMS ({len(ref_items)} line item(s) reference PRODUCTS#{pk})"
+                )
+        elif tbl == "CUSTOMERS":
+            ref_orders = [o for o in self.orders.values() if str(o.get("customer_id")) == pk]
+            if ref_orders:
+                raise ValueError(
+                    f"ORA-02292: integrity constraint violated - child record found in ORDERS ({len(ref_orders)} order(s) reference CUSTOMERS#{pk})"
+                )
 
         old_row = target_map.pop(pk)
 
@@ -876,6 +1101,27 @@ class OracleEngineEmulator:
             "change_timestamp": now_ts,
             "commit_order_seq": self.seq_commit
         })
+
+        # ON DELETE CASCADE for ORDERS -> ORDER_ITEMS
+        if tbl == "ORDERS":
+            child_keys = [ipk for ipk, it in self.order_items.items() if str(it.get("order_id")) == pk]
+            for ipk in child_keys:
+                old_item = self.order_items.pop(ipk)
+                self.seq_change += 1
+                self.seq_commit += 1
+                self.change_log.append({
+                    "change_id": self.seq_change,
+                    "tx_id": tx_id,
+                    "table_name": "ORDER_ITEMS",
+                    "record_pk": ipk,
+                    "operation_type": "DELETE",
+                    "old_values": old_item,
+                    "new_values": None,
+                    "delta_values": None,
+                    "changed_columns": None,
+                    "change_timestamp": now_ts,
+                    "commit_order_seq": self.seq_commit
+                })
 
         return {
             "status": "SUCCESS",
@@ -1065,6 +1311,16 @@ class OracleEngineEmulator:
         if not parent_commit_id:
             parent_commit_id = self._get_branch_head(b["branch_id"])
 
+        # Resolve current branch state before applying commit so before_values/deltas are always complete
+        changes_list = changes or []
+        existing_by_tbl: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        if changes_list:
+            cur_state = self.get_branch_state(b["branch_id"], "__ALL__")
+            for row in cur_state.get("records", []):
+                t_name = row.get("_table", "CUSTOMERS")
+                pk_val = str(row.get("customer_id") or row.get("product_id") or row.get("order_id") or row.get("item_id"))
+                existing_by_tbl.setdefault(t_name, {})[pk_val] = {k: v for k, v in row.items() if not k.startswith("_")}
+
         self.seq_branch_commit += 1
         self.seq_commit += 1
         commit_id = f"c{self.seq_branch_commit}"
@@ -1084,23 +1340,36 @@ class OracleEngineEmulator:
         self.branch_commits.append(commit_record)
 
         # Store changesets
-        changes_list = changes or []
         for chg in changes_list:
             self.seq_changeset += 1
             tbl = chg.get("table_name", "").upper()
+            rec_id = str(chg.get("record_id"))
             op = chg.get("operation_type", "UPDATE").upper()
             before_val = chg.get("before_values")
+            if before_val is None and op in ("UPDATE", "DELETE"):
+                before_val = copy.deepcopy(existing_by_tbl.get(tbl, {}).get(rec_id))
             after_val = chg.get("after_values")
+            if op == "UPDATE" and before_val and after_val:
+                merged_after = copy.deepcopy(before_val)
+                merged_after.update(after_val)
+                after_val = merged_after
+
             delta_val = chg.get("delta_values")
             changed_cols = chg.get("changed_columns")
-            if not changed_cols and before_val and after_val:
-                changed_cols = ",".join(k for k in after_val if before_val.get(k) != after_val.get(k))
+            if op == "UPDATE" and before_val and after_val:
+                diff_cols = [k for k in after_val if before_val.get(k) != after_val.get(k) and k not in {"created_at", "updated_at"}]
+                if not changed_cols:
+                    changed_cols = ",".join(diff_cols) if diff_cols else "NONE"
+                if not delta_val and diff_cols:
+                    delta_val = {k: {"old": before_val.get(k), "new": after_val.get(k)} for k in diff_cols}
+            elif not changed_cols:
+                changed_cols = "ALL"
 
             self.branch_changesets.append({
                 "changeset_id": self.seq_changeset,
                 "commit_id": commit_id,
                 "table_name": tbl,
-                "record_id": str(chg.get("record_id")),
+                "record_id": rec_id,
                 "operation_type": op,
                 "before_values": before_val,
                 "after_values": after_val,
@@ -1112,6 +1381,78 @@ class OracleEngineEmulator:
         commit_copy["changeset_count"] = len(changes_list)
         commit_copy["changes"] = [cs for cs in self.branch_changesets if cs["commit_id"] == commit_id]
         return commit_copy
+
+    def revert_branch_to_commit(
+        self,
+        branch_id_or_name: Union[int, str],
+        target_commit_id: str,
+        author: str = "developer",
+        commit_message: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Non-destructively restores a branch's database state back to a specific earlier commit
+        by creating a new commit containing the inverse changesets.
+        """
+        b = self._resolve_branch(branch_id_or_name)
+        target_commit = next(
+            (c for c in self.branch_commits if c["branch_id"] == b["branch_id"] and c["commit_id"] == target_commit_id),
+            None
+        )
+        if not target_commit:
+            raise ValueError(f"Commit '{target_commit_id}' not found on branch '{b['branch_name']}'")
+
+        head_state = self.get_branch_state(b["branch_id"], "__ALL__")
+        target_state = self.get_branch_state(b["branch_id"], "__ALL__", commit_id=target_commit_id)
+
+        def index_state(recs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+            indexed = {}
+            for r in recs:
+                t = r.get("_table", "CUSTOMERS")
+                pk_val = str(r.get("customer_id") or r.get("product_id") or r.get("order_id") or r.get("item_id"))
+                indexed[f"{t}:{pk_val}"] = {k: v for k, v in r.items() if not k.startswith("_")}
+            return indexed
+
+        head_idx = index_state(head_state["records"])
+        target_idx = index_state(target_state["records"])
+
+        changes = []
+        for key in sorted(set(head_idx.keys()) | set(target_idx.keys())):
+            tbl, pk = key.split(":", 1)
+            h_row = head_idx.get(key)
+            t_row = target_idx.get(key)
+
+            if not h_row and t_row:
+                changes.append({
+                    "table_name": tbl,
+                    "record_id": pk,
+                    "operation_type": "INSERT",
+                    "before_values": None,
+                    "after_values": t_row
+                })
+            elif h_row and not t_row:
+                changes.append({
+                    "table_name": tbl,
+                    "record_id": pk,
+                    "operation_type": "DELETE",
+                    "before_values": h_row,
+                    "after_values": None
+                })
+            elif h_row != t_row:
+                changes.append({
+                    "table_name": tbl,
+                    "record_id": pk,
+                    "operation_type": "UPDATE",
+                    "before_values": h_row,
+                    "after_values": t_row
+                })
+
+        msg = commit_message or f"Revert branch '{b['branch_name']}' back to commit {target_commit_id}"
+        return self.create_branch_commit(
+            branch_id_or_name=b["branch_id"],
+            commit_message=msg,
+            author=author,
+            changes=changes
+        )
 
     def get_branch_commits(self, branch_id_or_name: Union[int, str]) -> List[Dict[str, Any]]:
         b = self._resolve_branch(branch_id_or_name)
@@ -1744,7 +2085,7 @@ class OracleEngineEmulator:
             lane = branch_lane_map.get(b_id, 0)
             branch_info = next((b for b in branches_data if b["branch_id"] == b_id), None)
             color = branch_info["color"] if branch_info else "#6366f1"
-            cs_count = len([cs for cs in self.branch_changesets if cs["commit_id"] == c["commit_id"]])
+            cs_list = [cs for cs in self.branch_changesets if cs["commit_id"] == c["commit_id"]]
 
             nodes.append({
                 "commit_id": c["commit_id"],
@@ -1757,7 +2098,8 @@ class OracleEngineEmulator:
                 "commit_type": c.get("commit_type", "NORMAL"),
                 "parent_commit_id": c.get("parent_commit_id"),
                 "merge_parent_commit_id": c.get("merge_parent_commit_id"),
-                "changeset_count": cs_count,
+                "changeset_count": len(cs_list),
+                "changes": cs_list,
                 "lane": lane,
                 "color": color
             })

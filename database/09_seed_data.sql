@@ -90,6 +90,74 @@ VALUES (1003, 502, 203, 1, 2850.00, 2850.00);
 INSERT INTO ORDER_ITEMS (item_id, order_id, product_id, quantity, unit_price, subtotal)
 VALUES (1004, 502, 204, 1, 6200.00, 6200.00);
 
+-- 4. Bulk Seed Additional Records to reach 50 rows per table
+BEGIN
+    FOR i IN 106..150 LOOP
+        INSERT INTO CUSTOMERS (customer_id, name, email, phone, status, credit_limit, created_at, updated_at)
+        VALUES (
+            i,
+            'Enterprise Partner ' || i,
+            'ops' || i || '@partnercorp.com',
+            '+1-555-' || TO_CHAR(i, 'FM0000'),
+            CASE WHEN MOD(i, 5) = 0 THEN 'SUSPENDED' ELSE 'ACTIVE' END,
+            (MOD(i, 10) + 1) * 25000.00,
+            SYSTIMESTAMP - INTERVAL '2' HOUR,
+            SYSTIMESTAMP - INTERVAL '2' HOUR
+        );
+    END LOOP;
+
+    FOR i IN 206..250 LOOP
+        INSERT INTO PRODUCTS (product_id, sku, name, category, unit_price, stock_quantity, created_at, updated_at)
+        VALUES (
+            i,
+            'SKU-ENT-' || i,
+            'Enterprise Hardware/SW Unit ' || (i - 200),
+            CASE MOD(i, 5)
+                WHEN 0 THEN 'Hardware'
+                WHEN 1 THEN 'Software'
+                WHEN 2 THEN 'Networking'
+                WHEN 3 THEN 'Security'
+                ELSE 'Power'
+            END,
+            500.00 + (i - 200) * 150.00,
+            10 + MOD(i, 40) * 5,
+            SYSTIMESTAMP - INTERVAL '2' HOUR,
+            SYSTIMESTAMP - INTERVAL '2' HOUR
+        );
+    END LOOP;
+
+    FOR i IN 504..550 LOOP
+        INSERT INTO ORDERS (order_id, customer_id, order_date, status, total_amount, notes, updated_at)
+        VALUES (
+            i,
+            101 + MOD(i - 504, 50),
+            SYSTIMESTAMP - INTERVAL '110' MINUTE,
+            CASE MOD(i, 4)
+                WHEN 0 THEN 'COMPLETED'
+                WHEN 1 THEN 'PROCESSING'
+                WHEN 2 THEN 'PENDING'
+                ELSE 'DELIVERED'
+            END,
+            1500.00 + (i - 500) * 350.00,
+            'Enterprise procurement batch #' || i,
+            SYSTIMESTAMP - INTERVAL '100' MINUTE
+        );
+    END LOOP;
+
+    FOR i IN 1006..1050 LOOP
+        INSERT INTO ORDER_ITEMS (item_id, order_id, product_id, quantity, unit_price, subtotal)
+        VALUES (
+            i,
+            504 + MOD(i - 1006, 47),
+            201 + MOD(i - 1006, 50),
+            1 + MOD(i, 4),
+            1000.00,
+            (1 + MOD(i, 4)) * 1000.00
+        );
+    END LOOP;
+END;
+/
+
 COMMIT;
 
 PROMPT Phase 1 Complete. Initial Baseline Checkpoint...
