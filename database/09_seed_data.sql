@@ -136,7 +136,7 @@ BEGIN
                 WHEN 0 THEN 'COMPLETED'
                 WHEN 1 THEN 'PROCESSING'
                 WHEN 2 THEN 'PENDING'
-                ELSE 'DELIVERED'
+                ELSE 'CANCELLED'
             END,
             1500.00 + (i - 500) * 350.00,
             'Enterprise procurement batch #' || i,

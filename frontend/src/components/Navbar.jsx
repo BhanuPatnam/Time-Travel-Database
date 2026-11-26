@@ -58,14 +58,6 @@ export default function Navbar({ dbStatus, activeTab = 'dashboard', onRefresh })
           <RefreshCw className={`w-3.5 h-3.5 text-[#687386] ${refreshing ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
         </button>
-
-        {/* Oracle connection indicator */}
-        <div className="flex items-center space-x-2 px-2.5 py-1 rounded-md bg-[#F0F2F5] border border-[#E2E6EC] text-xs">
-          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-[#34765A]' : 'bg-[#A66B16]'}`} />
-          <span className="font-mono text-[11px] font-medium text-[#202833]">
-            {isConnected ? 'Oracle 21c (Connected)' : 'Dev Fallback (Offline)'}
-          </span>
-        </div>
       </div>
     </header>
   );

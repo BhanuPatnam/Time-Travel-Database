@@ -146,7 +146,7 @@ CREATE OR REPLACE PACKAGE BODY TT_BRANCH_PKG AS
                 v_parent_id := resolve_branch_id(p_parent_branch_name);
             EXCEPTION WHEN OTHERS THEN
                 v_parent_id := NULL;
-            END IF;
+            END;
         END IF;
 
         -- If parent exists and base commit not supplied, get parent's HEAD commit
@@ -199,38 +199,55 @@ CREATE OR REPLACE PACKAGE BODY TT_BRANCH_PKG AS
     BEGIN
         SELECT JSON_ARRAYAGG(
             JSON_OBJECT(
-                'branch_id'        VALUE b.branch_id,
-                'branch_name'      VALUE b.branch_name,
-                'parent_branch_id' VALUE b.parent_branch_id,
-                'parent_name'      VALUE p.branch_name,
-                'base_commit_id'   VALUE b.base_commit_id,
-                'base_timestamp'   VALUE TO_CHAR(b.base_timestamp, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
-                'created_at'       VALUE TO_CHAR(b.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
-                'created_by'       VALUE b.created_by,
-                'branch_status'    VALUE b.branch_status,
-                'is_default'       VALUE (CASE WHEN b.is_default = 1 THEN 'Y' ELSE 'N' END),
-                'description'      VALUE b.description,
-                'commit_count'     VALUE (SELECT COUNT(*) FROM TT_BRANCH_COMMITS c WHERE c.branch_id = b.branch_id),
-                'head_commit_id'   VALUE (
+                'branch_id'           VALUE t.branch_id,
+                'branch_name'         VALUE t.branch_name,
+                'parent_branch_id'    VALUE t.parent_branch_id,
+                'parent_name'         VALUE t.parent_name,
+                'base_commit_id'      VALUE t.base_commit_id,
+                'base_timestamp'      VALUE TO_CHAR(t.base_timestamp, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
+                'created_at'          VALUE TO_CHAR(t.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
+                'created_by'          VALUE t.created_by,
+                'branch_status'       VALUE t.branch_status,
+                'is_default'          VALUE (CASE WHEN t.is_default = 1 THEN 'Y' ELSE 'N' END),
+                'description'         VALUE t.description,
+                'commit_count'        VALUE t.commit_count,
+                'head_commit_id'      VALUE t.head_commit_id,
+                'head_commit_message' VALUE t.head_commit_message
+            ) ORDER BY t.is_default DESC, t.created_at ASC
+            RETURNING CLOB
+        ) INTO v_result
+        FROM (
+            SELECT
+                b.branch_id,
+                b.branch_name,
+                b.parent_branch_id,
+                p.branch_name AS parent_name,
+                b.base_commit_id,
+                b.base_timestamp,
+                b.created_at,
+                b.created_by,
+                b.branch_status,
+                b.is_default,
+                b.description,
+                (SELECT COUNT(*) FROM TT_BRANCH_COMMITS c WHERE c.branch_id = b.branch_id) AS commit_count,
+                (
                     SELECT c2.commit_id FROM (
                         SELECT commit_id FROM TT_BRANCH_COMMITS 
                         WHERE branch_id = b.branch_id 
                         ORDER BY commit_order_seq DESC
                     ) c2 WHERE ROWNUM = 1
-                ),
-                'head_commit_message' VALUE (
+                ) AS head_commit_id,
+                (
                     SELECT c3.commit_message FROM (
                         SELECT commit_message FROM TT_BRANCH_COMMITS 
                         WHERE branch_id = b.branch_id 
                         ORDER BY commit_order_seq DESC
                     ) c3 WHERE ROWNUM = 1
-                )
-            ) ORDER BY b.is_default DESC, b.created_at ASC
-            RETURNING CLOB
-        ) INTO v_result
-        FROM TT_BRANCHES b
-        LEFT JOIN TT_BRANCHES p ON b.parent_branch_id = p.branch_id
-        WHERE b.branch_status != 'DELETED';
+                ) AS head_commit_message
+            FROM TT_BRANCHES b
+            LEFT JOIN TT_BRANCHES p ON b.parent_branch_id = p.branch_id
+            WHERE b.branch_status != 'DELETED'
+        ) t;
 
         RETURN NVL(v_result, '[]');
     END list_branches;
@@ -243,23 +260,38 @@ CREATE OR REPLACE PACKAGE BODY TT_BRANCH_PKG AS
         v_branch_id := resolve_branch_id(p_branch_id_or_name);
 
         SELECT JSON_OBJECT(
-            'branch_id'        VALUE b.branch_id,
-            'branch_name'      VALUE b.branch_name,
-            'parent_branch_id' VALUE b.parent_branch_id,
-            'parent_name'      VALUE p.branch_name,
-            'base_commit_id'   VALUE b.base_commit_id,
-            'base_timestamp'   VALUE TO_CHAR(b.base_timestamp, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
-            'created_at'       VALUE TO_CHAR(b.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
-            'created_by'       VALUE b.created_by,
-            'branch_status'    VALUE b.branch_status,
-            'is_default'       VALUE (CASE WHEN b.is_default = 1 THEN 'Y' ELSE 'N' END),
-            'description'      VALUE b.description,
-            'commit_count'     VALUE (SELECT COUNT(*) FROM TT_BRANCH_COMMITS c WHERE c.branch_id = b.branch_id)
+            'branch_id'        VALUE t.branch_id,
+            'branch_name'      VALUE t.branch_name,
+            'parent_branch_id' VALUE t.parent_branch_id,
+            'parent_name'      VALUE t.parent_name,
+            'base_commit_id'   VALUE t.base_commit_id,
+            'base_timestamp'   VALUE TO_CHAR(t.base_timestamp, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
+            'created_at'       VALUE TO_CHAR(t.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM'),
+            'created_by'       VALUE t.created_by,
+            'branch_status'    VALUE t.branch_status,
+            'is_default'       VALUE (CASE WHEN t.is_default = 1 THEN 'Y' ELSE 'N' END),
+            'description'      VALUE t.description,
+            'commit_count'     VALUE t.commit_count
             RETURNING CLOB
         ) INTO v_result
-        FROM TT_BRANCHES b
-        LEFT JOIN TT_BRANCHES p ON b.parent_branch_id = p.branch_id
-        WHERE b.branch_id = v_branch_id;
+        FROM (
+            SELECT
+                b.branch_id,
+                b.branch_name,
+                b.parent_branch_id,
+                p.branch_name AS parent_name,
+                b.base_commit_id,
+                b.base_timestamp,
+                b.created_at,
+                b.created_by,
+                b.branch_status,
+                b.is_default,
+                b.description,
+                (SELECT COUNT(*) FROM TT_BRANCH_COMMITS c WHERE c.branch_id = b.branch_id) AS commit_count
+            FROM TT_BRANCHES b
+            LEFT JOIN TT_BRANCHES p ON b.parent_branch_id = p.branch_id
+            WHERE b.branch_id = v_branch_id
+        ) t;
 
         RETURN v_result;
     END get_branch;
@@ -418,23 +450,27 @@ CREATE OR REPLACE PACKAGE BODY TT_BRANCH_PKG AS
     ) RETURN VARCHAR2 IS
         v_src_id NUMBER;
         v_tgt_id NUMBER;
+        v_src_head VARCHAR2(64);
+        v_tgt_head VARCHAR2(64);
         v_ancestor_commit VARCHAR2(64) := NULL;
     BEGIN
         v_src_id := resolve_branch_id(p_source_branch);
         v_tgt_id := resolve_branch_id(p_target_branch);
+        v_src_head := get_branch_head(v_src_id);
+        v_tgt_head := get_branch_head(v_tgt_id);
 
         -- Find the latest commit present in both source ancestry and target ancestry
         BEGIN
             WITH src_ancestors AS (
                 SELECT commit_id, commit_order_seq, LEVEL as lvl
                 FROM TT_BRANCH_COMMITS
-                START WITH commit_id = get_branch_head(v_src_id)
+                START WITH commit_id = v_src_head
                 CONNECT BY PRIOR parent_commit_id = commit_id OR PRIOR merge_parent_commit_id = commit_id
             ),
             tgt_ancestors AS (
                 SELECT commit_id, commit_order_seq, LEVEL as lvl
                 FROM TT_BRANCH_COMMITS
-                START WITH commit_id = get_branch_head(v_tgt_id)
+                START WITH commit_id = v_tgt_head
                 CONNECT BY PRIOR parent_commit_id = commit_id OR PRIOR merge_parent_commit_id = commit_id
             )
             SELECT s.commit_id INTO v_ancestor_commit
