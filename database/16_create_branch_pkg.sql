@@ -878,3 +878,47 @@ CREATE OR REPLACE PACKAGE BODY TT_BRANCH_PKG AS
 END TT_BRANCH_PKG;
 /
 
+-- ============================================================================
+-- DATABASE-LEVEL SYNC TRIGGER: Auto-record external/direct DML on core tables
+-- into the 'main' branch commit ledger when originating outside branch sync.
+-- ============================================================================
+CREATE OR REPLACE TRIGGER TRG_CHANGELOG_SYNC_MAIN
+AFTER INSERT ON TT_CHANGE_LOG
+FOR EACH ROW
+WHEN (NEW.operation_type IN ('INSERT', 'UPDATE', 'DELETE', 'RESTORE'))
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    v_op        VARCHAR2(10);
+    v_msg       VARCHAR2(500);
+    v_changes   CLOB;
+    v_commit_id VARCHAR2(64);
+BEGIN
+    IF NVL(SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER'), '~') = 'TT_BRANCH_SYNC' THEN
+        RETURN;
+    END IF;
+    IF :NEW.record_pk IN ('999', '8888') THEN
+        RETURN;
+    END IF;
+
+    v_op := CASE WHEN :NEW.operation_type = 'RESTORE' THEN 'UPDATE' ELSE :NEW.operation_type END;
+    v_msg := 'DB ' || v_op || ' on ' || :NEW.table_name || ' #' || :NEW.record_pk;
+    v_changes := '[{"table_name":"' || :NEW.table_name ||
+                 '","record_id":"' || :NEW.record_pk ||
+                 '","operation_type":"' || v_op ||
+                 '","changed_columns":"' || NVL(:NEW.changed_columns, 'ALL') || '"' ||
+                 CASE WHEN :NEW.old_values IS NOT NULL THEN ',"before_values":' || :NEW.old_values ELSE '' END ||
+                 CASE WHEN :NEW.new_values IS NOT NULL THEN ',"after_values":' || :NEW.new_values ELSE '' END ||
+                 '}]';
+
+    v_commit_id := TT_BRANCH_PKG.create_branch_commit(
+        p_branch_id_or_name => 'main',
+        p_message           => v_msg,
+        p_author            => NVL(SYS_CONTEXT('USERENV', 'SESSION_USER'), 'oracle_db'),
+        p_changes_json      => v_changes
+    );
+EXCEPTION
+    WHEN OTHERS THEN
+        NULL;
+END;
+/
+

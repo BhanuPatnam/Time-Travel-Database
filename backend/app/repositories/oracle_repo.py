@@ -512,17 +512,6 @@ class TimeTravelRepository:
                 with conn.cursor() as cur:
                     cur.execute(sql, vals)
                     conn.commit()
-                self._record_main_branch_commit(
-                    conn,
-                    f"Insert into {tbl}",
-                    [{
-                        "table_name": tbl,
-                        "record_id": str(data.get(pk_col) or data.get(pk_col.lower()) or "new"),
-                        "operation_type": "INSERT",
-                        "after_values": data,
-                        "changed_columns": "ALL",
-                    }],
-                )
                 return {"status": "SUCCESS", "message": f"Successfully inserted row into {tbl}."}
             except Exception as e:
                 conn.rollback()
@@ -575,17 +564,6 @@ class TimeTravelRepository:
                     if cur.rowcount == 0:
                         raise ValueError(f"Record with {pk_col}={record_pk} does not exist in {tbl}")
                     conn.commit()
-                self._record_main_branch_commit(
-                    conn,
-                    f"Update {tbl} #{record_pk}",
-                    [{
-                        "table_name": tbl,
-                        "record_id": str(record_pk),
-                        "operation_type": "UPDATE",
-                        "after_values": data,
-                        "changed_columns": ",".join(col for col, _ in editable_items),
-                    }],
-                )
                 return {"status": "SUCCESS", "message": f"Successfully updated row {record_pk} in {tbl}."}
             except Exception as e:
                 conn.rollback()
@@ -610,16 +588,6 @@ class TimeTravelRepository:
                     if cur.rowcount == 0:
                         raise ValueError(f"Record with {pk_col}={record_pk} does not exist in {tbl}")
                     conn.commit()
-                self._record_main_branch_commit(
-                    conn,
-                    f"Delete {tbl} #{record_pk}",
-                    [{
-                        "table_name": tbl,
-                        "record_id": str(record_pk),
-                        "operation_type": "DELETE",
-                        "changed_columns": "ALL",
-                    }],
-                )
                 return {"status": "SUCCESS", "message": f"Successfully deleted row {record_pk} from {tbl}."}
             except Exception as e:
                 conn.rollback()
@@ -768,75 +736,79 @@ class TimeTravelRepository:
             return val
 
         with conn.cursor() as cur:
-            for cs in changes:
-                tbl_raw = cs.get("table_name")
-                if not tbl_raw:
-                    continue
-                try:
-                    tbl = self._validate_table(tbl_raw)
-                except ValueError:
-                    continue
-                pk_col = (
-                    "CUSTOMER_ID" if tbl == "CUSTOMERS" else
-                    "PRODUCT_ID" if tbl == "PRODUCTS" else
-                    "ORDER_ID" if tbl == "ORDERS" else
-                    "ITEM_ID"
-                )
-                rec_id = cs.get("record_id")
-                op = (cs.get("operation_type") or "").upper()
-                after_vals = cs.get("after_values")
-                if isinstance(after_vals, str):
-                    after_vals = json.loads(after_vals)
-                if not isinstance(after_vals, dict):
-                    after_vals = {}
-                if not after_vals and cs.get("delta_values"):
-                    dv = cs["delta_values"]
-                    if isinstance(dv, str):
-                        dv = json.loads(dv)
-                    if isinstance(dv, dict):
-                        after_vals = {k: (v.get("new") if isinstance(v, dict) else v) for k, v in dv.items()}
+            cur.execute("BEGIN DBMS_SESSION.SET_IDENTIFIER('TT_BRANCH_SYNC'); END;")
+            try:
+                for cs in changes:
+                    tbl_raw = cs.get("table_name")
+                    if not tbl_raw:
+                        continue
+                    try:
+                        tbl = self._validate_table(tbl_raw)
+                    except ValueError:
+                        continue
+                    pk_col = (
+                        "CUSTOMER_ID" if tbl == "CUSTOMERS" else
+                        "PRODUCT_ID" if tbl == "PRODUCTS" else
+                        "ORDER_ID" if tbl == "ORDERS" else
+                        "ITEM_ID"
+                    )
+                    rec_id = cs.get("record_id")
+                    op = (cs.get("operation_type") or "").upper()
+                    after_vals = cs.get("after_values")
+                    if isinstance(after_vals, str):
+                        after_vals = json.loads(after_vals)
+                    if not isinstance(after_vals, dict):
+                        after_vals = {}
+                    if not after_vals and cs.get("delta_values"):
+                        dv = cs["delta_values"]
+                        if isinstance(dv, str):
+                            dv = json.loads(dv)
+                        if isinstance(dv, dict):
+                            after_vals = {k: (v.get("new") if isinstance(v, dict) else v) for k, v in dv.items()}
 
-                if op == "DELETE":
-                    cur.execute(f"DELETE FROM {tbl} WHERE {pk_col} = :1", [coerce(pk_col, rec_id)])
-                elif op == "INSERT":
-                    items = []
-                    has_pk = False
-                    for k, v in after_vals.items():
-                        k_up = k.upper()
-                        if k_up in skip_cols:
-                            continue
-                        if k_up == pk_col:
-                            has_pk = True
-                        items.append((k_up, coerce(k_up, v)))
-                    if not has_pk and rec_id is not None:
-                        items.append((pk_col, coerce(pk_col, rec_id)))
-                    if items:
-                        cols = [c for c, _ in items]
-                        phs = [f":{i+1}" for i in range(len(items))]
-                        vals = [v for _, v in items]
-                        try:
-                            cur.execute(f"INSERT INTO {tbl} ({', '.join(cols)}) VALUES ({', '.join(phs)})", vals)
-                        except Exception:
-                            upd = [(c, v) for c, v in items if c != pk_col]
-                            if upd and rec_id is not None:
-                                sets = [f"{c} = :{i+1}" for i, (c, _) in enumerate(upd)]
-                                uvals = [v for _, v in upd] + [coerce(pk_col, rec_id)]
-                                cur.execute(f"UPDATE {tbl} SET {', '.join(sets)} WHERE {pk_col} = :{len(uvals)}", uvals)
-                elif op == "UPDATE":
-                    upd = [(k.upper(), coerce(k.upper(), v)) for k, v in after_vals.items() if k.upper() not in skip_cols and k.upper() != pk_col]
-                    if upd and rec_id is not None:
-                        sets = [f"{c} = :{i+1}" for i, (c, _) in enumerate(upd)]
-                        uvals = [v for _, v in upd] + [coerce(pk_col, rec_id)]
-                        cur.execute(f"UPDATE {tbl} SET {', '.join(sets)} WHERE {pk_col} = :{len(uvals)}", uvals)
-                        if cur.rowcount == 0:
-                            ins_items = [(pk_col, coerce(pk_col, rec_id))] + upd
-                            cols = [c for c, _ in ins_items]
-                            phs = [f":{i+1}" for i in range(len(ins_items))]
+                    if op == "DELETE":
+                        cur.execute(f"DELETE FROM {tbl} WHERE {pk_col} = :1", [coerce(pk_col, rec_id)])
+                    elif op == "INSERT":
+                        items = []
+                        has_pk = False
+                        for k, v in after_vals.items():
+                            k_up = k.upper()
+                            if k_up in skip_cols:
+                                continue
+                            if k_up == pk_col:
+                                has_pk = True
+                            items.append((k_up, coerce(k_up, v)))
+                        if not has_pk and rec_id is not None:
+                            items.append((pk_col, coerce(pk_col, rec_id)))
+                        if items:
+                            cols = [c for c, _ in items]
+                            phs = [f":{i+1}" for i in range(len(items))]
+                            vals = [v for _, v in items]
                             try:
-                                cur.execute(f"INSERT INTO {tbl} ({', '.join(cols)}) VALUES ({', '.join(phs)})", [v for _, v in ins_items])
-                            except Exception as ins_err:
-                                logger.warning(f"Skipping insert fallback for {tbl} #{rec_id}: {ins_err}")
-            conn.commit()
+                                cur.execute(f"INSERT INTO {tbl} ({', '.join(cols)}) VALUES ({', '.join(phs)})", vals)
+                            except Exception:
+                                upd = [(c, v) for c, v in items if c != pk_col]
+                                if upd and rec_id is not None:
+                                    sets = [f"{c} = :{i+1}" for i, (c, _) in enumerate(upd)]
+                                    uvals = [v for _, v in upd] + [coerce(pk_col, rec_id)]
+                                    cur.execute(f"UPDATE {tbl} SET {', '.join(sets)} WHERE {pk_col} = :{len(uvals)}", uvals)
+                    elif op == "UPDATE":
+                        upd = [(k.upper(), coerce(k.upper(), v)) for k, v in after_vals.items() if k.upper() not in skip_cols and k.upper() != pk_col]
+                        if upd and rec_id is not None:
+                            sets = [f"{c} = :{i+1}" for i, (c, _) in enumerate(upd)]
+                            uvals = [v for _, v in upd] + [coerce(pk_col, rec_id)]
+                            cur.execute(f"UPDATE {tbl} SET {', '.join(sets)} WHERE {pk_col} = :{len(uvals)}", uvals)
+                            if cur.rowcount == 0:
+                                ins_items = [(pk_col, coerce(pk_col, rec_id))] + upd
+                                cols = [c for c, _ in ins_items]
+                                phs = [f":{i+1}" for i in range(len(ins_items))]
+                                try:
+                                    cur.execute(f"INSERT INTO {tbl} ({', '.join(cols)}) VALUES ({', '.join(phs)})", [v for _, v in ins_items])
+                                except Exception as ins_err:
+                                    logger.warning(f"Skipping insert fallback for {tbl} #{rec_id}: {ins_err}")
+                conn.commit()
+            finally:
+                cur.execute("BEGIN DBMS_SESSION.CLEAR_IDENTIFIER; END;")
 
     def create_branch_commit(
         self,
