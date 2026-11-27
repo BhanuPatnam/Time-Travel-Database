@@ -512,6 +512,17 @@ class TimeTravelRepository:
                 with conn.cursor() as cur:
                     cur.execute(sql, vals)
                     conn.commit()
+                self._record_main_branch_commit(
+                    conn,
+                    f"Insert into {tbl}",
+                    [{
+                        "table_name": tbl,
+                        "record_id": str(data.get(pk_col) or data.get(pk_col.lower()) or "new"),
+                        "operation_type": "INSERT",
+                        "after_values": data,
+                        "changed_columns": "ALL",
+                    }],
+                )
                 return {"status": "SUCCESS", "message": f"Successfully inserted row into {tbl}."}
             except Exception as e:
                 conn.rollback()
@@ -564,6 +575,17 @@ class TimeTravelRepository:
                     if cur.rowcount == 0:
                         raise ValueError(f"Record with {pk_col}={record_pk} does not exist in {tbl}")
                     conn.commit()
+                self._record_main_branch_commit(
+                    conn,
+                    f"Update {tbl} #{record_pk}",
+                    [{
+                        "table_name": tbl,
+                        "record_id": str(record_pk),
+                        "operation_type": "UPDATE",
+                        "after_values": data,
+                        "changed_columns": ",".join(col for col, _ in editable_items),
+                    }],
+                )
                 return {"status": "SUCCESS", "message": f"Successfully updated row {record_pk} in {tbl}."}
             except Exception as e:
                 conn.rollback()
@@ -588,6 +610,16 @@ class TimeTravelRepository:
                     if cur.rowcount == 0:
                         raise ValueError(f"Record with {pk_col}={record_pk} does not exist in {tbl}")
                     conn.commit()
+                self._record_main_branch_commit(
+                    conn,
+                    f"Delete {tbl} #{record_pk}",
+                    [{
+                        "table_name": tbl,
+                        "record_id": str(record_pk),
+                        "operation_type": "DELETE",
+                        "changed_columns": "ALL",
+                    }],
+                )
                 return {"status": "SUCCESS", "message": f"Successfully deleted row {record_pk} from {tbl}."}
             except Exception as e:
                 conn.rollback()
@@ -688,6 +720,124 @@ class TimeTravelRepository:
 
         return oracle_emulator.delete_branch(branch_id_or_name)
 
+    def _is_main_branch(self, conn, branch_id_or_name: Union[int, str]) -> bool:
+        ident = str(branch_id_or_name or "").strip()
+        if ident.lower() == "main":
+            return True
+        try:
+            with conn.cursor() as cur:
+                if ident.isdigit():
+                    cur.execute("SELECT is_default FROM TT_BRANCHES WHERE branch_id = :1 AND branch_status != 'DELETED'", [int(ident)])
+                else:
+                    cur.execute("SELECT is_default FROM TT_BRANCHES WHERE LOWER(branch_name) = LOWER(:1) AND branch_status != 'DELETED'", [ident])
+                row = cur.fetchone()
+                return bool(row and row[0] == 1)
+        except Exception:
+            return False
+
+    def _record_main_branch_commit(self, conn, message: str, changes: List[Dict[str, Any]]) -> None:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT TT_BRANCH_PKG.create_branch_commit('main', :1, 'system', :2, NULL, 'NORMAL', NULL) FROM DUAL",
+                    [message, json.dumps(changes)],
+                )
+        except Exception as e:
+            logger.warning(f"Non-fatal: failed to record main branch commit: {e}")
+
+    def _apply_changesets_to_live_oracle(self, conn, changes: List[Dict[str, Any]]) -> None:
+        if not changes:
+            return
+        float_cols = {"CREDIT_LIMIT", "UNIT_PRICE", "TOTAL_AMOUNT", "SUBTOTAL"}
+        int_cols = {"STOCK_QUANTITY", "QUANTITY", "CUSTOMER_ID", "ORDER_ID", "PRODUCT_ID", "ITEM_ID"}
+        skip_cols = {"CREATED_AT", "UPDATED_AT", "_TABLE"}
+
+        def coerce(col_up: str, val: Any) -> Any:
+            if val == "" or val is None:
+                return None
+            if col_up in float_cols:
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return val
+            if col_up in int_cols:
+                try:
+                    return int(val)
+                except (ValueError, TypeError):
+                    return val
+            return val
+
+        with conn.cursor() as cur:
+            for cs in changes:
+                tbl_raw = cs.get("table_name")
+                if not tbl_raw:
+                    continue
+                try:
+                    tbl = self._validate_table(tbl_raw)
+                except ValueError:
+                    continue
+                pk_col = (
+                    "CUSTOMER_ID" if tbl == "CUSTOMERS" else
+                    "PRODUCT_ID" if tbl == "PRODUCTS" else
+                    "ORDER_ID" if tbl == "ORDERS" else
+                    "ITEM_ID"
+                )
+                rec_id = cs.get("record_id")
+                op = (cs.get("operation_type") or "").upper()
+                after_vals = cs.get("after_values")
+                if isinstance(after_vals, str):
+                    after_vals = json.loads(after_vals)
+                if not isinstance(after_vals, dict):
+                    after_vals = {}
+                if not after_vals and cs.get("delta_values"):
+                    dv = cs["delta_values"]
+                    if isinstance(dv, str):
+                        dv = json.loads(dv)
+                    if isinstance(dv, dict):
+                        after_vals = {k: (v.get("new") if isinstance(v, dict) else v) for k, v in dv.items()}
+
+                if op == "DELETE":
+                    cur.execute(f"DELETE FROM {tbl} WHERE {pk_col} = :1", [coerce(pk_col, rec_id)])
+                elif op == "INSERT":
+                    items = []
+                    has_pk = False
+                    for k, v in after_vals.items():
+                        k_up = k.upper()
+                        if k_up in skip_cols:
+                            continue
+                        if k_up == pk_col:
+                            has_pk = True
+                        items.append((k_up, coerce(k_up, v)))
+                    if not has_pk and rec_id is not None:
+                        items.append((pk_col, coerce(pk_col, rec_id)))
+                    if items:
+                        cols = [c for c, _ in items]
+                        phs = [f":{i+1}" for i in range(len(items))]
+                        vals = [v for _, v in items]
+                        try:
+                            cur.execute(f"INSERT INTO {tbl} ({', '.join(cols)}) VALUES ({', '.join(phs)})", vals)
+                        except Exception:
+                            upd = [(c, v) for c, v in items if c != pk_col]
+                            if upd and rec_id is not None:
+                                sets = [f"{c} = :{i+1}" for i, (c, _) in enumerate(upd)]
+                                uvals = [v for _, v in upd] + [coerce(pk_col, rec_id)]
+                                cur.execute(f"UPDATE {tbl} SET {', '.join(sets)} WHERE {pk_col} = :{len(uvals)}", uvals)
+                elif op == "UPDATE":
+                    upd = [(k.upper(), coerce(k.upper(), v)) for k, v in after_vals.items() if k.upper() not in skip_cols and k.upper() != pk_col]
+                    if upd and rec_id is not None:
+                        sets = [f"{c} = :{i+1}" for i, (c, _) in enumerate(upd)]
+                        uvals = [v for _, v in upd] + [coerce(pk_col, rec_id)]
+                        cur.execute(f"UPDATE {tbl} SET {', '.join(sets)} WHERE {pk_col} = :{len(uvals)}", uvals)
+                        if cur.rowcount == 0:
+                            ins_items = [(pk_col, coerce(pk_col, rec_id))] + upd
+                            cols = [c for c, _ in ins_items]
+                            phs = [f":{i+1}" for i in range(len(ins_items))]
+                            try:
+                                cur.execute(f"INSERT INTO {tbl} ({', '.join(cols)}) VALUES ({', '.join(phs)})", [v for _, v in ins_items])
+                            except Exception as ins_err:
+                                logger.warning(f"Skipping insert fallback for {tbl} #{rec_id}: {ins_err}")
+            conn.commit()
+
     def create_branch_commit(
         self,
         branch_id_or_name: Union[int, str],
@@ -709,6 +859,8 @@ class TimeTravelRepository:
                         ) FROM DUAL
                     """, [str(branch_id_or_name), commit_message, author, changes_json, parent_commit_id, commit_type, merge_parent_commit_id])
                     cid = cur.fetchone()[0]
+                if self._is_main_branch(conn, branch_id_or_name) and changes:
+                    self._apply_changesets_to_live_oracle(conn, changes)
                 return {"commit_id": cid, "message": commit_message, "author": author}
             except Exception as e:
                 logger.error(f"Oracle TT_BRANCH_PKG.create_branch_commit failed: {e}")
@@ -850,7 +1002,27 @@ class TimeTravelRepository:
                     """, [str(source_branch), str(target_branch), merge_message, author, resolution_strategy, resolved_json])
                     res = cur.fetchone()[0]
                     content = res.read() if hasattr(res, 'read') else res
-                    return json.loads(content)
+                    result = json.loads(content)
+                if result.get("status") == "SUCCESS" and result.get("merge_commit_id") and self._is_main_branch(conn, target_branch):
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT table_name, record_id, operation_type, after_values, delta_values
+                            FROM TT_BRANCH_CHANGESET
+                            WHERE commit_id = :1
+                            ORDER BY changeset_id ASC
+                        """, [result["merge_commit_id"]])
+                        merged_changes = [
+                            {
+                                "table_name": r[0],
+                                "record_id": r[1],
+                                "operation_type": r[2],
+                                "after_values": r[3].read() if hasattr(r[3], 'read') else r[3],
+                                "delta_values": r[4].read() if hasattr(r[4], 'read') else r[4],
+                            }
+                            for r in cur.fetchall()
+                        ]
+                    self._apply_changesets_to_live_oracle(conn, merged_changes)
+                return result
             except Exception as e:
                 logger.error(f"Oracle TT_BRANCH_PKG.merge_branches failed: {e}")
                 raise ValueError(f"Failed to merge branches: {str(e)}")
@@ -871,7 +1043,30 @@ class TimeTravelRepository:
                     cur.execute("SELECT TT_BRANCH_PKG.resolve_merge_conflict(:1, :2, :3) FROM DUAL", [merge_id, res_json, author])
                     res = cur.fetchone()[0]
                     content = res.read() if hasattr(res, 'read') else res
-                    return json.loads(content)
+                    result = json.loads(content)
+                if result.get("status") == "SUCCESS" and result.get("merge_commit_id"):
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT target_branch_id FROM TT_BRANCH_MERGE_HISTORY WHERE merge_id = :1", [merge_id])
+                        m_row = cur.fetchone()
+                        if m_row and self._is_main_branch(conn, m_row[0]):
+                            cur.execute("""
+                                SELECT table_name, record_id, operation_type, after_values, delta_values
+                                FROM TT_BRANCH_CHANGESET
+                                WHERE commit_id = :1
+                                ORDER BY changeset_id ASC
+                            """, [result["merge_commit_id"]])
+                            merged_changes = [
+                                {
+                                    "table_name": r[0],
+                                    "record_id": r[1],
+                                    "operation_type": r[2],
+                                    "after_values": r[3].read() if hasattr(r[3], 'read') else r[3],
+                                    "delta_values": r[4].read() if hasattr(r[4], 'read') else r[4],
+                                }
+                                for r in cur.fetchall()
+                            ]
+                            self._apply_changesets_to_live_oracle(conn, merged_changes)
+                return result
             except Exception as e:
                 logger.error(f"Oracle TT_BRANCH_PKG.resolve_merge_conflict failed: {e}")
                 raise ValueError(f"Failed to resolve merge conflict: {str(e)}")

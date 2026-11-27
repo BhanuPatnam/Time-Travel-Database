@@ -57,6 +57,7 @@ export default function BranchingPage() {
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCommitModal, setShowCommitModal] = useState(false);
+  const [stagedChanges, setStagedChanges] = useState([]);
   const [showCompareModal, setShowCompareModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
 
@@ -93,7 +94,12 @@ export default function BranchingPage() {
     customer_id: 101,
     order_status: 'PROCESSING',
     total_amount: 21000.0,
-    notes: ''
+    notes: '',
+    // Order Item fields
+    order_id: 501,
+    product_id: 201,
+    quantity: 1,
+    subtotal: 4500.0
   });
 
   const [compareForm, setCompareForm] = useState({
@@ -217,7 +223,12 @@ export default function BranchingPage() {
         customer_id: row.customer_id ?? 101,
         order_status: row.status ?? 'PROCESSING',
         total_amount: row.total_amount ?? 1500,
-        notes: row.notes ?? ''
+        notes: row.notes ?? '',
+        // Order Item
+        order_id: row.order_id ?? 501,
+        product_id: row.product_id ?? 201,
+        quantity: row.quantity ?? 1,
+        subtotal: row.subtotal ?? 4500
       }));
     } else {
       setCommitForm(prev => ({
@@ -232,7 +243,8 @@ export default function BranchingPage() {
 
   const openCommitModalForRow = (row, opType = 'UPDATE') => {
     const tbl = (row?._table || activeStateTable === '__ALL__' ? (row?._table || 'CUSTOMERS') : activeStateTable).toUpperCase();
-    const pk = row ? getRowPk(row, tbl) : String(tbl === 'CUSTOMERS' ? 151 : tbl === 'PRODUCTS' ? 251 : 551);
+    const pk = row ? getRowPk(row, tbl) : String(tbl === 'CUSTOMERS' ? 151 : tbl === 'PRODUCTS' ? 251 : tbl === 'ORDERS' ? 551 : 1051);
+    setStagedChanges([]);
     populateCommitFormFromRow(tbl, pk, opType, row);
     setCommitForm(prev => ({
       ...prev,
@@ -378,6 +390,75 @@ export default function BranchingPage() {
     }
   };
 
+  const buildChangeFromForm = () => {
+    let afterValues = null;
+    if (commitForm.operation_type !== 'DELETE') {
+      if (commitForm.table_name === 'CUSTOMERS') {
+        afterValues = {
+          customer_id: Number(commitForm.record_id),
+          name: commitForm.name,
+          email: commitForm.email,
+          phone: commitForm.phone,
+          status: commitForm.status,
+          credit_limit: parseFloat(commitForm.credit_limit)
+        };
+      } else if (commitForm.table_name === 'PRODUCTS') {
+        afterValues = {
+          product_id: Number(commitForm.record_id),
+          sku: commitForm.sku,
+          name: commitForm.name,
+          category: commitForm.category,
+          unit_price: parseFloat(commitForm.unit_price),
+          stock_quantity: parseInt(commitForm.stock_quantity, 10)
+        };
+      } else if (commitForm.table_name === 'ORDERS') {
+        afterValues = {
+          order_id: Number(commitForm.record_id),
+          customer_id: Number(commitForm.customer_id),
+          status: commitForm.order_status,
+          total_amount: parseFloat(commitForm.total_amount),
+          notes: commitForm.notes
+        };
+      } else if (commitForm.table_name === 'ORDER_ITEMS') {
+        afterValues = {
+          item_id: Number(commitForm.record_id),
+          order_id: Number(commitForm.order_id),
+          product_id: Number(commitForm.product_id),
+          quantity: parseInt(commitForm.quantity, 10),
+          unit_price: parseFloat(commitForm.unit_price),
+          subtotal: parseFloat(commitForm.subtotal)
+        };
+      }
+    }
+
+    return {
+      table_name: commitForm.table_name,
+      record_id: String(commitForm.record_id),
+      operation_type: commitForm.operation_type,
+      after_values: afterValues,
+      before_values: commitForm.before_values
+    };
+  };
+
+  const handleAddOperationToCommit = () => {
+    if (!String(commitForm.record_id).trim()) {
+      showToast('Record ID is required to stage an operation', true);
+      return;
+    }
+    const item = buildChangeFromForm();
+    setStagedChanges(prev => {
+      const filtered = prev.filter(
+        c => !(c.table_name === item.table_name && c.record_id === item.record_id)
+      );
+      return [...filtered, item];
+    });
+    showToast(`Staged ${item.operation_type} on ${item.table_name} #${item.record_id}`);
+  };
+
+  const handleRemoveStagedOperation = (idx) => {
+    setStagedChanges(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleCommitSubmit = async (e) => {
     e.preventDefault();
     if (!commitForm.commit_message.trim()) {
@@ -386,53 +467,17 @@ export default function BranchingPage() {
     }
     try {
       setLoading(true);
-      let afterValues = null;
-      if (commitForm.operation_type !== 'DELETE') {
-        if (commitForm.table_name === 'CUSTOMERS') {
-          afterValues = {
-            customer_id: Number(commitForm.record_id),
-            name: commitForm.name,
-            email: commitForm.email,
-            phone: commitForm.phone,
-            status: commitForm.status,
-            credit_limit: parseFloat(commitForm.credit_limit)
-          };
-        } else if (commitForm.table_name === 'PRODUCTS') {
-          afterValues = {
-            product_id: Number(commitForm.record_id),
-            sku: commitForm.sku,
-            name: commitForm.name,
-            category: commitForm.category,
-            unit_price: parseFloat(commitForm.unit_price),
-            stock_quantity: parseInt(commitForm.stock_quantity, 10)
-          };
-        } else if (commitForm.table_name === 'ORDERS') {
-          afterValues = {
-            order_id: Number(commitForm.record_id),
-            customer_id: Number(commitForm.customer_id),
-            status: commitForm.order_status,
-            total_amount: parseFloat(commitForm.total_amount),
-            notes: commitForm.notes
-          };
-        }
-      }
-
-      const changeItem = {
-        table_name: commitForm.table_name,
-        record_id: String(commitForm.record_id),
-        operation_type: commitForm.operation_type,
-        after_values: afterValues,
-        before_values: commitForm.before_values
-      };
+      const changesToSubmit = stagedChanges.length > 0 ? stagedChanges : [buildChangeFromForm()];
 
       const res = await apiService.createBranchCommit(activeBranch, {
         commit_message: commitForm.commit_message.trim(),
         author: commitForm.author || 'developer',
-        changes: [changeItem]
+        changes: changesToSubmit
       });
 
-      showToast(`Commit '${res.commit_id}' recorded on branch '${activeBranch}'!`);
+      showToast(`Commit '${res.commit_id}' (${changesToSubmit.length} operation${changesToSubmit.length > 1 ? 's' : ''}) recorded on '${activeBranch}'!`);
       setShowCommitModal(false);
+      setStagedChanges([]);
       setCommitForm(prev => ({ ...prev, commit_message: '' }));
       // Refresh BOTH branch list (commit counts) and branch details (selectedCommit = new commit)
       await Promise.all([
@@ -1683,7 +1728,7 @@ export default function BranchingPage() {
       ========================================================================= */}
       {showCommitModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 backdrop-blur-xs">
-          <div className="bg-[#FFFFFF] border border-[#E2E6EC] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#FFFFFF] border border-[#E2E6EC] rounded-xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-[#E2E6EC] pb-3">
               <h3 className="font-bold text-[#202833] text-sm flex items-center space-x-2">
                 <GitCommit className="w-4 h-4 text-[#D97706]" />
@@ -1700,7 +1745,7 @@ export default function BranchingPage() {
                     value={commitForm.table_name}
                     onChange={(e) => {
                       const nextTbl = e.target.value;
-                      const nextPk = nextTbl === 'CUSTOMERS' ? '101' : nextTbl === 'PRODUCTS' ? '201' : '501';
+                      const nextPk = nextTbl === 'CUSTOMERS' ? '101' : nextTbl === 'PRODUCTS' ? '201' : nextTbl === 'ORDERS' ? '501' : '1001';
                       populateCommitFormFromRow(nextTbl, nextPk, commitForm.operation_type);
                     }}
                     className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E6EC] rounded-lg text-[#202833] focus:border-[#4263A5] outline-none cursor-pointer"
@@ -1708,6 +1753,7 @@ export default function BranchingPage() {
                     <option value="CUSTOMERS">CUSTOMERS</option>
                     <option value="PRODUCTS">PRODUCTS</option>
                     <option value="ORDERS">ORDERS</option>
+                    <option value="ORDER_ITEMS">ORDER_ITEMS</option>
                   </select>
                 </div>
 
@@ -1874,8 +1920,8 @@ export default function BranchingPage() {
                           <option value="PENDING">PENDING</option>
                           <option value="PROCESSING">PROCESSING</option>
                           <option value="COMPLETED">COMPLETED</option>
-                          <option value="DELIVERED">DELIVERED</option>
                           <option value="CANCELLED">CANCELLED</option>
+                          <option value="REFUNDED">REFUNDED</option>
                         </select>
                       </div>
                       <div>
@@ -1899,6 +1945,117 @@ export default function BranchingPage() {
                       </div>
                     </div>
                   )}
+
+                  {commitForm.table_name === 'ORDER_ITEMS' && (
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Order ID</label>
+                        <input
+                          type="number"
+                          value={commitForm.order_id}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, order_id: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Product ID</label>
+                        <input
+                          type="number"
+                          value={commitForm.product_id}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, product_id: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Quantity</label>
+                        <input
+                          type="number"
+                          value={commitForm.quantity}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, quantity: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#687386] font-semibold">Subtotal ($)</label>
+                        <input
+                          type="number"
+                          step="10"
+                          value={commitForm.subtotal}
+                          onChange={(e) => setCommitForm(prev => ({ ...prev, subtotal: e.target.value }))}
+                          className="w-full px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E6EC] rounded text-[#202833] font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between bg-[#F7F8FA] border border-[#E2E6EC] rounded-lg px-3 py-2">
+                <span className="text-[11px] text-[#687386]">
+                  Stage multiple INSERT / UPDATE / DELETE operations across tables into one commit:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleAddOperationToCommit}
+                  className="px-2.5 py-1 bg-[#FFFFFF] hover:bg-[#EEF2FF] border border-[#4263A5] text-[#4263A5] font-semibold rounded-md flex items-center space-x-1 cursor-pointer shrink-0 ml-2"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Operation to Commit</span>
+                </button>
+              </div>
+
+              {stagedChanges.length > 0 && (
+                <div className="p-3 bg-[#F7F8FA] rounded-lg border border-[#E2E6EC] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#202833] uppercase tracking-wider">
+                      Staged Operations ({stagedChanges.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStagedChanges([])}
+                      className="text-[10px] text-[#687386] hover:text-[#DC2626] cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {stagedChanges.map((item, idx) => (
+                      <div
+                        key={`${item.table_name}-${item.record_id}-${idx}`}
+                        className="flex items-center justify-between bg-[#FFFFFF] border border-[#E2E6EC] rounded px-2.5 py-1.5 text-[11px]"
+                      >
+                        <div className="flex items-center space-x-2 truncate">
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                              item.operation_type === 'INSERT'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : item.operation_type === 'DELETE'
+                                ? 'bg-rose-100 text-rose-700'
+                                : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            {item.operation_type}
+                          </span>
+                          <span className="font-mono font-bold text-[#202833]">
+                            {item.table_name} #{item.record_id}
+                          </span>
+                          {item.after_values && (
+                            <span className="text-[#687386] truncate max-w-[260px]">
+                              {JSON.stringify(item.after_values)}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStagedOperation(idx)}
+                          className="text-[#687386] hover:text-[#DC2626] ml-2 cursor-pointer"
+                          title="Remove operation"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1907,7 +2064,7 @@ export default function BranchingPage() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Modify customer credit limit for branch experiment"
+                  placeholder="e.g. Batch update customer credit limits and product pricing"
                   value={commitForm.commit_message}
                   onChange={(e) => setCommitForm(prev => ({ ...prev, commit_message: e.target.value }))}
                   className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E6EC] rounded-lg text-[#202833] focus:border-[#4263A5] outline-none"
@@ -1927,7 +2084,11 @@ export default function BranchingPage() {
                   disabled={loading}
                   className="px-4 py-1.5 bg-[#4263A5] hover:bg-[#345188] text-white font-semibold rounded-lg cursor-pointer shadow-xs"
                 >
-                  {loading ? 'Recording...' : 'Commit to Branch'}
+                  {loading
+                    ? 'Recording...'
+                    : stagedChanges.length > 0
+                    ? `Commit ${stagedChanges.length} Operation${stagedChanges.length > 1 ? 's' : ''} to Branch`
+                    : 'Commit to Branch'}
                 </button>
               </div>
             </form>
